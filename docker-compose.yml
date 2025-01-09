@@ -1,27 +1,16 @@
-version: '3.8'
+version: '3.9'
+
 services:
-  app:
+  flask_ai:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: F:/SY_work/Sparta/Project/flask_ai  # Flask AI 프로젝트의 Dockerfile 위치
+    command: flask run --host=0.0.0.0 --port=5000
     ports:
       - "5000:5000"
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    depends_on:
-      - db
+    networks:
+      - maiddy_shared_network  # Django 백엔드와 동일 네트워크 사용
 
-  db:
-    image: postgres:14
-    environment:
-      POSTGRES_USER: maiddy_admin
-      POSTGRES_PASSWORD: youngpotygotop123
-      POSTGRES_DB: maiddy_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
 
-volumes:
-  db_data:
+networks:
+  maiddy_shared_network:
+    external: true  # 이미 백엔드 Docker Compose에서 정의된 네트워크 사용
