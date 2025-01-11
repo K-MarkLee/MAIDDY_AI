@@ -1,18 +1,41 @@
+"""
+Flask 인스턴스 생성
+DB 초기화
+블루 프린트 등록 등을 처리
+"""
+
 from flask import Flask
-from app.database import db
+from .database import db
+from .models import AiResponse, Diary, Schedule, Todo, User
+from .routes.chatbot import chatbot_bp
+from .routes.feedback import feedback_bp
+from .routes.recommend import recommend_bp
+from decouple import config # 환경변수 불러오기
+from .scheduler import start_scheduler
+from flask_migrate import Migrate
 
 
-app = Flask(__name__)
+def create_app():
+    app = Flask(__name__)
+    # 필요하다면 config 설정
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"postgresql://{config('DB_USER')}:{config('DB_PASSWORD')}@{config('DB_HOST')}:{config('DB_PORT')}/{config('DB_NAME')}"
+    app.config["JWT_SECRET_KEY"] = config("JWT_SECRET_KEY")
+    
+    # DB 초기화
+    db.init_db(app)
 
-# DB 설정
-app.config['SQLALCHEMY_DATABASE_URI'] = (
-    "postgresql://maiddy_admin:youngpotygotop123@db:5432/maiddy_db" # 지워야 공유가능
-)
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    # 마이그레이션 초기화
+    migrate = Migrate(app, db)
 
-# DB 초기화
-db.init_app(app)
+    with app.app_context():
+        db.create_all()
 
-# 블루프린트 등록
-from app.routes import main
-app.register_blueprint(main)
+    # Blueprint 등록
+    app.register_blueprint(chatbot_bp, url_prefix="/chatbot")
+    app.register_blueprint(feedback_bp, url_prefix="/feedback")
+    app.register_blueprint(recommend_bp, url_prefix="/recommend")
+
+    # 스케줄러 시작
+    start_scheduler(app)
+
+    return app

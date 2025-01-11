@@ -1,13 +1,58 @@
-version: '3.9'
+# version: '3.9'
 services:
   flask_ai:
     build:
       context: .  # Flask AI 프로젝트의 Dockerfile 위치
     command: flask run --host=0.0.0.0 --port=5000
+    container_name: maiddy_ai
     ports:
       - "5000:5000"
     networks:
       - maiddy_shared_network  # Django 백엔드와 동일 네트워크 사용
+
+    environment: # .env 파일에 있는 환경변수를 사용.
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+      - DB_NAME=${DB_NAME}
+      - JWT_SECRET=${JWT_SECRET}
+
+
+  db: # db 컨테이너 설정.
+    image: postgres:latest # postgres 의 최신 이미지 사용.
+
+    container_name: maiddy-db-1 # 컨테이너 이름 설정.
+
+    restart: always # 컨테이너가 종료되면 항상 재시작.
+
+    environment: # .env 파일에 있는 환경변수를 사용.
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data 
+
+    networks:
+      - shared_network
+
+    command: > # 컨테이너가 시작되면 PostgreSQL을 시작하고 5초 후에 vector 확장을 설치. / vector 확장은 PostgreSQL에서 벡터 데이터를 처리하는 데 사용됨.
+      bash -c "
+      docker-entrypoint.sh postgres &
+      sleep 5 &&
+      psql -U myuser -d mydb -c 'CREATE EXTENSION IF NOT EXISTS vector;' &&
+      wait
+      "
+
+
 networks:
-  maiddy_shared_network:
+  maiddy_shared_network: # 백엔드 네트워크 이름.
+    driver: bridge  
     external: true  # 이미 백엔드 Docker Compose에서 정의된 네트워크 사용
+
+volumes:
+  postgres_data:

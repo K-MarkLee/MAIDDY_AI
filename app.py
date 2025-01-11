@@ -1,24 +1,13 @@
-from flask import Flask
-from app.database import db
-from app.routes import main  # routes.py의 Blueprint 가져오기
-from dotenv import load_dotenv
-import os
+"""
+FLASK를 실행
+FLASK app을 불러와 호출.
+gunicorn 또는 uwsgi를 사용하여 FLASK app을 실행
+"""
 
-# .env 파일 로드
-load_dotenv()
+from app import create_app
 
-app = Flask(__name__)
+app = create_app()
 
-# 데이터베이스 설정
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# 데이터베이스 초기화
-db.init_app(app)
-
-# Blueprint 등록
-app.register_blueprint(main)
-
-# 애플리케이션 실행
 if __name__ == "__main__":
+    # 실제 docker에서는 gunicorn이나 flask run으로 실행 가능
     app.run(host="0.0.0.0", port=5000, debug=True)
