@@ -1,12 +1,8 @@
-"""
-ORM 모델
-"""
-
+# app/models.py
 
 from .database import db
 from datetime import datetime
-from sqlalchemy.dialects.postgresql import VECTOR
-
+from typing import Optional
 
 class User(db.Model):
     # 사용자 정보를 저장하는 테이블
@@ -14,73 +10,67 @@ class User(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_name = db.Column(db.String(255), nullable=False, unique=True)
-
+    access_token = db.Column(db.String(512), nullable=True)  # Access Token
+    refresh_token = db.Column(db.String(512), nullable=True)  # Refresh Token
+    access_token_expires = db.Column(db.Integer, nullable=True)  # Access Token 만료 시간 (타임스탬프)
+    
     # 관계 설정
     diaries = db.relationship('Diary', backref='user', lazy=True)
     schedules = db.relationship('Schedule', backref='user', lazy=True)
-    todo = db.relationship('Todo', backref='user', lazy=True)
+    todos = db.relationship('Todo', backref='user', lazy=True)
     ai_responses = db.relationship('AiResponse', backref='user', lazy=True)
     summaries = db.relationship('Summary', backref='user', lazy=True)
-
-
 
 class AiResponse(db.Model):
     # AI의 응답을 저장하는 테이블
     __tablename__ = "ai_responses"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(255), db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
     question = db.Column(db.Text, nullable=False)
     response = db.Column(db.Text, nullable=False)
     select_date = db.Column(db.Date, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now())  #now는 현재 시간을 가져오는 함수   
-    embedding = db.Column(VECTOR)
-    
 
+    user = db.relationship('User', backref=db.backref('ai_responses', lazy=True))
 
 class Diary(db.Model):
     # 일기 정보를 저장하는 테이블
     __tablename__ = "diaries_diary"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(255), db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
     select_date = db.Column(db.Date, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now())
-
 
 class Schedule(db.Model):
     # 일정 정보를 저장하는 테이블
     __tablename__ = "schedules_schedule"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(255), db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     content = db.Column(db.Text, nullable=True)
     select_date = db.Column(db.Date, nullable=False)
-    time = db.Column(db.Time, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now())
-
+    time = db.Column(db.String(5), nullable=False) # HH:MM 형식으로 저장
 
 class Todo(db.Model):
     # 할일 정보를 저장하는 테이블
     __tablename__ = "todo_todo"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(255), db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
     is_completed = db.Column(db.Boolean, default=False)
     select_date = db.Column(db.Date, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now())
-
-
 
 class Summary(db.Model):
     __tablename__ = "summaries_summary"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(255), db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
     summary_text = db.Column(db.Text, nullable=False)
-    embedding = db.Column(VECTOR(1536)) 
+    type = db.Column(db.String(50), nullable=False)
     select_date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now())
+
+    user = db.relationship('User', backref=db.backref('summaries', lazy=True))

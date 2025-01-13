@@ -1,77 +1,93 @@
-"""
-APSscheduler 작업을 위한 별도 파일
-"""
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.utils.llm_service import LLMService
-from app.models import AiResponse, User, Summary
+from app.models import Summary, User
 from app.database import db
-from sqlalchemy import func
 from datetime import datetime, timedelta
 from flask import current_app
-
+from app.models import Diary, Todo, Schedule
 
 llm_service = LLMService()
 
-def weekly_training():
+def daily_update():
     """
-    매주 월요일 실행
-    - 사용자의 요약 데이터 수집
-    - Embedding 생성, LLM 학습, 업데이트
+    매일 실행되는 작업:
+    - 모든 사용자의 새로운 summaries 데이터를 수집
+    - 요약 및 임베딩 생성 후 FAISS에 저장
+    - summaries 데이터를 삭제
     """
+    try:
+        users = User.query.all()
+        yesterday = datetime.now().date() - timedelta(days=1)
 
-    with db.session.no_autoflush:
-        try:
-            users = User.query.all()
-            for user in users:
+        for user in users:
+            current_app.logger.info(f"{user.user_name}님의 {yesterday}의 요약 데이터를 처리합니다.")
 
-                # 사용자의 지난 주간 데이터수집
-                one_week_ago = datetime.now() - timedelta(days=7)
-                recent_responses = AiResponse.query.filter(
-                    AiResponse.user_id == user.id,
-                    AiResponse.select_date >= one_week_ago
-                ).order_by(AiResponse.select_date.desc()).all()
-                response_texts = [response.response for response in recent_responses]
-                combined_responses = "\n".join(response_texts)
+            # 이미 피드백이 생성되었는지 확인(피드백이 생성되었으면 FAISS 업데이트가 이미 되었음.)
+            feedback_summary = Summary.query.filter_by(
+                user_id=user.id,
+                select_date=yesterday,
+                type="feedback"
+            ).first()
 
+            if feedback_summary:   
+                current_app.logger.info(f"{user.user_name}님의 피드백 데이터가 있습니다. 처리하지 않습니다.")
+                # Summary 삭제
+                db.session.delete(feedback_summary)
+                db.session.commit()
+                continue  # 다음 사용자로 이동
+                
 
-                # Summary 모델에서 지난 주간 요약 데이터 수집
-                recent_summaries = Summary.query.filter(
-                    Summary.user_id == user.id,
-                    Summary.select_date >= one_week_ago
-                ).order_by(Summary.select_date.desc()).all()
-                summary_texts = [summary.summary_text for summary in recent_summaries]
-                combined_summaries = "\n".join(summary_texts)
+            # 어제 날짜의 Diary, Todo, Schedule 데이터를 수집
+            diaries = Diary.query.filter_by(user_id=user.id, select_date=yesterday).all()
+            todo = Todo.query.filter_by(user_id=user.id, select_date=yesterday).all()
+            schedules = Schedule.query.filter_by(user_id=user.id, select_date=yesterday).all()
 
-                # 두 데이터를 합침
-                combined_text = combined_responses + "\n" + combined_summaries
+            # 데이터 존재 여부 확인
+            if not diaries and not todo and not schedules:
+                current_app.logger.info(f"{user.user_name}의 {yesterday} 정보가 없습니다.")
+                continue
 
+            # 데이터 결합
+            diary_texts = [diary.content for diary in diaries]
+            todo_texts = [todo.content for todo in todo]
+            schedule_texts = [f"{schedule.title}: {schedule.content}" for schedule in schedules]
 
-                if combined_text.strip():
-                    # Embedding 생성 및 VectorStore에 저장
-                    embedding = llm_service.embed_text(combined_text)
-                    llm_service.vector_store.add_texts(
-                        texts=[combined_text],
-                        ids=[str(user.id)],
-                        embeddings=[embedding]
-                    )
-                    current_app.logger.info(f" {user.id}유저의 주간 학습 완료")
-                    
-                    # 학습한 데이터 삭제
-                    for summary in recent_summaries:
-                        db.session.delete(summary)
-                    db.session.commit()
-                    current_app.logger.info(f"Deleted processed data for user {user.id}")
-        except Exception as e:
-            current_app.logger.error(f"Weekly training task failed: {e}")
+            combined_text = "\n".join(diary_texts + todo_texts + schedule_texts)
+            current_app.logger.debug(f"Combined text for {user.user_name}: {combined_text[:100]}...")  # 로그에 일부만 표시
 
+            # llm_service를 사용하여 요약 생성 및 저장
+            summary = llm_service.summarize_and_save(
+                user_id=user.id,
+                text=combined_text,
+                data_type="feedback",
+                select_date=yesterday
+            )
 
-def start_scheduler():
+            if summary:
+                current_app.logger.info(f"{user.user_name}의 {yesterday}의 요약이 생성되었습니다.")
+
+                # 처리한 Summary 데이터 삭제
+                db.session.delete(summary)
+                db.session.commit()
+                current_app.logger.info(f"Summary ID {summary.id} for {user.user_name} has been deleted after embedding.")
+            else:
+                current_app.logger.error(f"Failed to create summary for {user.user_name} on {yesterday}.")
+                
+    except Exception as e:
+        current_app.logger.error(f"Daily update task failed: {e}")
+
+def start_scheduler(app):
+    """
+    스케줄러를 초기화하고, 주기적인 작업을 설정.
+    
+    :param app: Flask 애플리케이션 인스턴스
+    """
     scheduler = BackgroundScheduler()
-
-    # 매주 월요일 자정에 실행
-    scheduler.add_job(func=weekly_training, trigger='cron', day_of_week='mon', hour=0, minute=0)
+    # 매일 자정에 실행
+    scheduler.add_job(func=daily_update, trigger='cron', day='*', hour=0, minute=0)
     scheduler.start()
 
-    import atexit # 프로세스 종료시 스케줄러 종료
+    # 앱 종료 시 스케줄러도 종료
+    import atexit
     atexit.register(lambda: scheduler.shutdown())

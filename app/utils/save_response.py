@@ -1,28 +1,28 @@
-from app.models import AiResponse, Summary
+
+from app.models import AiResponse
 from app.database import db
-from app.utils.llm_service import LLMService
 from flask import current_app
+from datetime import date
 
-llm_service = LLMService()
-
-
-def save_ai_response(user_id: str, question: str, response: str): # ai의 응답을 저장하는 함수
-    # AiResponse 테이블에 저장
+def save_ai_response(user, question: str, response: str, select_date: date = None):
+    """
+    AI 응답을 데이터베이스에 저장.
+    
+    :param user_id: 사용자의 고유 ID
+    :param question: 질문 내용 (predefined prompt)
+    :param answer: AI의 응답
+    :param select_date: 선택된 날짜 (피드백 및 recommend에 해당)
+    """
     try:
-        embedding = llm_service.get_embedding(response)
-        ai_response = AiResponse(user_id=user_id, question=question, response=response, embedding = embedding)
-        db.session.add(ai_response)
+        ai_resp = AiResponse(
+            user_id=user.user_id,
+            question=question,
+            response=response,
+            select_date=select_date
+        )
+        db.session.add(ai_resp)
         db.session.commit()
     except Exception as e:
-        current_app.logger.error(f"DB 저장 중 오류 발생: {e}")
-
-
-def save_summary(user_id: str, summary_text: str): # 요약을 저장하는 함수
-    # Summary 테이블에 저장
-    try:
-        embedding = llm_service.get_embedding(summary_text)
-        summary = Summary(user_id=user_id, summary_text=summary_text, embedding=embedding)
-        db.session.add(summary)
-        db.session.commit()
-    except Exception as e:
-        current_app.logger.error(f"DB 저장 중 오류 발생: {e}")
+        # 예외 발생 시 로그에 기록
+        user_name = user.user_name if user else "Unknown"
+        current_app.logger.error(f"{user_name}의 응답 생성을 실패하였습니다. : {e}")

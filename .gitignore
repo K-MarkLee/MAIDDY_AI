@@ -169,3 +169,17 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+
+# FAISS index files
+faiss_indexes/
+*.index
+*.summary_ids
+
+# Logs
+logs/
+*.log
+
+# Docker
+*.pyc
+docker-compose.override.yml

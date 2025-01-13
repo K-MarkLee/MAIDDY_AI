@@ -17,28 +17,33 @@ from flask_cors import CORS
 import os
 from logging.handlers import RotatingFileHandler
 import logging
+from .utils.other_utils import TokenManager
+from app.utils.jwt_utils import require_jwt
 
 
 def create_app():
     app = Flask(__name__)
     # 필요하다면 config 설정
     app.config["SQLALCHEMY_DATABASE_URI"] = f"postgresql://{config('DB_USER')}:{config('DB_PASSWORD')}@{config('DB_HOST')}:{config('DB_PORT')}/{config('DB_NAME')}"
-    app.config["JWT_SECRET_KEY"] = config("JWT_SECRET_KEY")
+    app.config["JWT_SECRET"] = config("JWT_SECRET")
+    app.config["JWT_ALGORITHM"] = config("JWT_ALGORITHM")
 
-
-    # CORS설정
+    # CORS설정 (프론트)
     CORS(app, resources={r"*": {"origins": "*"}})
     
     # DB 초기화
-    db.init_db(app)
+    db.init_app(app)
 
     # 마이그레이션 초기화
     migrate = Migrate(app, db)
 
+
+    token_manager = TokenManager()
+
     # 로깅 설정
     if not os.path.exists('logs'):
         os.mkdir('logs')
-    file_handler = RotatingFileHandler('logs/flask_ai.log', maxBytes=10240, backupCount=10)
+    file_handler = RotatingFileHandler('logs/maiddy_ai.log', maxBytes=10240, backupCount=10)
     file_handler.setFormatter(logging.Formatter(
         '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
     ))
@@ -46,7 +51,7 @@ def create_app():
     app.logger.addHandler(file_handler)
 
     app.logger.setLevel(logging.INFO)
-    app.logger.info('Flask AI startup')
+    app.logger.info('MAIDDY_AI startup')
 
 
     # with app.app_context():
