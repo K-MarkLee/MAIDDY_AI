@@ -1,7 +1,9 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from app.utils.data_process import retrieve_and_summarize
 from app.utils.llm_service import LLMService
 from app.utils.save_response import save_ai_response
+from app.database import db
+from app.models import User, Summary
 
 
 recommend_bp = Blueprint("recommend_bp", __name__)
@@ -14,23 +16,45 @@ def generate_recommend():
     """
     data = request.json or {}
     user_id = data.get("user_id")
-    select_date = data.get("select_date")
+    query = data.get("query")
 
-    if not user_id or not select_date:
-        return jsonify({"error": "유저 아이디 또는 날짜 정보가 없습니다"}), 400
+    current_app.logger.info(f"{user_id}님의 {query} 추천 요청 성공")
+
+    if not user_id or not query:
+        current_app.logger.warning(f"유저 아이디 또는 정보가 없습니다: {data}")
+        return jsonify({"error": "유저 아이디 또는 정보가 없습니다"}), 400
     
-    try:
-        summaries = retrieve_and_summarize(user_id, select_date)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    user = User.query.filter_by(id=user_id).first()
+    if not user:
+        current_app.logger.warning(f"유저 아이디가 없습니다: {user_id}")
+        return jsonify({"error": "유저 아이디가 없습니다"}), 400
     
 
-    combined_summaries = summaries.get("diaries", []) + summaries.get("todo", []) + summaries.get("schedules", [])
-    recommend_prompt = f"다음 요약된 내용들을 참고하여서 개인적으로 일정을 추천해서 알려줘. 단답식 ~추천합니다 식으로.\n" + "\n".join(combined_summaries) + "\n\n 추천:"
-    recommend = llm_service.generate_recommend(recommend_prompt)
+        # 사용자 요약 데이터 수집
+    recent_summaries = Summary.query.filter(
+        Summary.user_id == user_id
+    ).order_by(Summary.created_at.desc()).all()
+    summary_texts = [summary.summary_text for summary in recent_summaries]
+    combined_summary = "\n".join(summary_texts)
+
+    # LLM을 사용하여 추천 사항 생성
+    prompt = f"""
+    당신은 일정 및 할일 관리 챗봇입니다. 사용자의 요약 데이터를 기반으로 추천 사항을 제안하세요.
+    사용자의 과거 요약: {combined_summary}
+    사용자 입력: "{query}"
+    추천 사항:
+    """
+
+    try :
+        recommend = llm_service.generate_direct_response(prompt)
+        current_app.logger.info(f"{user_id}유저의 추천 생성 성공: {recommend}")
 
 
-    # DB 저장
-    save_ai_response(user_id, f"{select_date} Recommend", recommend)
+        # 응답 저장
+        save_ai_response(user_id, query, recommend)
 
-    return jsonify({"recommend": recommend}), 200
+        return jsonify({"recommend": recommend}), 200
+    except Exception as e:
+        current_app.logger.error(f"추천 생성 중 오류 발생: {e}")
+        return jsonify({"error": "추천 생성 중 오류 발생"}), 500
+    

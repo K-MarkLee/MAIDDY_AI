@@ -1,7 +1,6 @@
 from datetime import datetime
 from app.models import Diary, Schedule, Todo, AiResponse
 from app.utils.llm_service import LLMService
-from sqlalchemy import func
 
 
 def retrieve_and_summarize(user_id: str, select_date: str) -> dict: # 유저 아이디와 날짜를 받아서 해당 날짜의 일기, 할일, 스케줄을 요약해서 반환

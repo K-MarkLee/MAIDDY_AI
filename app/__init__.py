@@ -6,13 +6,17 @@ DB 초기화
 
 from flask import Flask
 from .database import db
-from .models import AiResponse, Diary, Schedule, Todo, User
+from .models import AiResponse, Diary, Schedule, Todo, User, Summary
 from .routes.chatbot import chatbot_bp
 from .routes.feedback import feedback_bp
 from .routes.recommend import recommend_bp
 from decouple import config # 환경변수 불러오기
 from .scheduler import start_scheduler
 from flask_migrate import Migrate
+from flask_cors import CORS
+import os
+from logging.handlers import RotatingFileHandler
+import logging
 
 
 def create_app():
@@ -20,6 +24,10 @@ def create_app():
     # 필요하다면 config 설정
     app.config["SQLALCHEMY_DATABASE_URI"] = f"postgresql://{config('DB_USER')}:{config('DB_PASSWORD')}@{config('DB_HOST')}:{config('DB_PORT')}/{config('DB_NAME')}"
     app.config["JWT_SECRET_KEY"] = config("JWT_SECRET_KEY")
+
+
+    # CORS설정
+    CORS(app, resources={r"*": {"origins": "*"}})
     
     # DB 초기화
     db.init_db(app)
@@ -27,8 +35,23 @@ def create_app():
     # 마이그레이션 초기화
     migrate = Migrate(app, db)
 
-    with app.app_context():
-        db.create_all()
+    # 로깅 설정
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
+    file_handler = RotatingFileHandler('logs/flask_ai.log', maxBytes=10240, backupCount=10)
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+    ))
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+
+    app.logger.setLevel(logging.INFO)
+    app.logger.info('Flask AI startup')
+
+
+    # with app.app_context():
+    #     db.create_all()
+
 
     # Blueprint 등록
     app.register_blueprint(chatbot_bp, url_prefix="/chatbot")
@@ -39,3 +62,5 @@ def create_app():
     start_scheduler(app)
 
     return app
+
+

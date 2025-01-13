@@ -6,57 +6,100 @@ llm 구현
 # app/utils/llm_service.py
 
 import openai
+from typing import List
 from decouple import config
+from langchain.llms import OpenAI
+from langchain.chains import RetrievalQA
+from langchain.vectorstores import PGVector
+from langchain.embeddings import OpenAIEmbeddings
+from flask import current_app
+    
+
 
 # OpenAI API 키 설정
-OPENAI_API_KEY = config("OPENAI_API_KEY", "")
-openai.api_key = OPENAI_API_KEY
+openai.api_key = config("OPENAI_API_KEY")
 
 class LLMService:
-    def __init__(self, model_name="gpt-3.5-turbo"):
-        # LangChain의 OpenAI LLM 래퍼
-        self.llm = OpenAI(model_name=model_name, openai_api_key=OPENAI_API_KEY)
-        
+    def __init__(self, model_name="gpt-4o-mini"):
+        self.model_name = model_name
+        self.llm = OpenAI(model_name = model_name, temperature = 0.5)
+        self.embeddings = OpenAIEmbeddings()
+        self.vector_store = PGVector(
+            connection_string = config("SQLALCHEMY_DATABASE_URI"),
+            embedding_dimension = 1536,
+            collection_name = "ai_responses"
+        )
+        self.qa_chain = RetrievalQA.from_chain_type(
+            llm = self.llm,
+            chain_type = "stuff",
+            retrieval = self.vector_store.as_retrieval(search_kwargs = {"k": 5}),
+            return_source_documents = True
+        )
+
     
     def generate_direct_response(self, prompt: str) -> str:
         """
-        간단히 prompt -> 답변
+        직접적인 질문에 대한 답변 생성
         """
-        response = openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=prompt,
-            max_tokens=100,
-            temperature=0.7
-        )
-        return response.choices[0].text.strip()
+        try:
+            response = openai.Completion.create(
+                engine = "gpt-4o-mini",
+                prompt = prompt,
+                max_tokens = 150,
+                temperature = 0.7
+            )
+            return response.choices[0].text.strip()
+        except Exception as e:
+            current_app.logger.error(f"직접적인 질문에 대한 답변 생성 중 오류 발생: {e}")
+            return "직접적인 질문에 대한 답변 생성 중 오류 발생"
 
+    
     def summarize_text(self, text: str) -> str:
         """
-        텍스트를 요약 또는 키워드 추출
+        텍스트 요약, 키워드 추출
         """
-        prompt = f"다음 텍스트를 요약하거나 핵심 키워드만 뽑아줘:\n{text}\n"
-        response = openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=prompt,
-            max_tokens=200,
-            temperature=0.3
-        )
-        summary = response.choices[0].text.strip()
-        return summary
+        try:
+            prompt = f"다음 주어진 텍스트를 요약하거나 핵심 키워드만 뽑아줘 : \n{text}\n\n요약:"
+            response = openai.api_key.create_completion(
+                engine = "gpt-4o-mini",
+                prompt = prompt,
+                max_tokens = 200,
+                temperature = 0.3
+            )
+            summary = response.choices[0].text.strip()
+            return summary
+        except Exception as e:
+            current_app.logger.error(f"텍스트 요약 중 오류 발생: {e}")
+            return "요약 중 오류 발생"
 
-    def generate_response(self, query: str, summarized_texts: list[str]) -> str:
-        """
-        LLM을 사용하여 답변 생성
-        """
-        combined_text = "/n".join(summarized_texts)
-        prompt = f"다음 요약된 내용들을 참고하여 질문에 답변해줘:\n{combined_text}\n\n질문: {query}\n답변:"
-        response = openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=prompt,
-            max_tokens=100,
-            temperature=0.5
-        )
-        response = response.choices[0].text.strip()
-        return response
 
-# FAISS를 써야해?
+    
+    def generate_response(self, summaries: List[str], query: str) -> str:
+        """
+        요약된 텍스트를 참고하여서 prompt를 생성
+        """
+        try:
+            response = self.qa_chain.run(query)
+            return response
+        except Exception as e:
+            current_app.logger.error(f"요약된 텍스트를 참고하여서 prompt 생성 중 오류 발생: {e}")
+            return "요약된 텍스트를 참고하여서 prompt 생성 중 오류 발생"
+        
+
+
+    def embed_text(self, text: str) -> List[float]:
+        """
+        텍스트를 Embedding으로 변환
+        """
+        try:
+            response = openai.Embedding.create(
+                input = text,
+                model = "text-embedding-3-small"
+            )
+            embedding = response['data'][0]['embedding']
+
+            return embedding
+        except Exception as e:
+            current_app.logger.error(f"텍스트를 Embedding으로 변환 중 오류 발생: {e}")
+            return []
+
