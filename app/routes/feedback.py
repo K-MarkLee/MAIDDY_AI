@@ -3,11 +3,12 @@
 from flask import Blueprint, request, jsonify, current_app
 from app.utils.llm_service import LLMService
 from app.utils.save_response import save_ai_response
-from app.models import Schedule, Todo, AiResponse, User, Summary, Diary
+from app.models import AiResponse, Summary
 from app.database import db
 from datetime import datetime
 from app.utils.jwt_utils import require_jwt
 from flask_jwt_extended import get_jwt_identity
+from app.models import Diary, Todo, Schedule
 
 feedback_bp = Blueprint("feedback_bp", __name__)
 llm_service = LLMService()

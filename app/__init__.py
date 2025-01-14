@@ -27,6 +27,7 @@ def create_app():
     app.config["SQLALCHEMY_DATABASE_URI"] = f"postgresql://{config('DB_USER')}:{config('DB_PASSWORD')}@{config('DB_HOST')}:{config('DB_PORT')}/{config('DB_NAME')}"
     app.config["JWT_SECRET"] = config("JWT_SECRET")
     app.config["JWT_ALGORITHM"] = config("JWT_ALGORITHM")
+ 
 
     # CORS설정 (프론트)
     CORS(app, resources={r"*": {"origins": "*"}})
@@ -34,11 +35,11 @@ def create_app():
     # DB 초기화
     db.init_app(app)
 
+
     # 마이그레이션 초기화
     migrate = Migrate(app, db)
 
 
-    token_manager = TokenManager()
 
     # 로깅 설정
     if not os.path.exists('logs'):

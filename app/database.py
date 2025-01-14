@@ -7,3 +7,5 @@
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
+# db.Model.metadata.reflect(db.engine)
+

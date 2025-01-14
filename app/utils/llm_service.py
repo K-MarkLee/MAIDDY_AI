@@ -8,7 +8,7 @@ llm 구현
 import openai
 from typing import List, Optional
 from decouple import config
-from app.models import Summary, User
+from app.models import Summary
 from app.database import db
 from flask import current_app
 from datetime import datetime
