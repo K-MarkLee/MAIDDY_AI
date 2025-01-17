@@ -1,1 +1,1 @@
-# 빈 파일
+# app/routes/__init__.py

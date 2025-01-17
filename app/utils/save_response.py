@@ -1,28 +1,64 @@
-
-from app.models import AiResponse
-from app.database import db
+from app.models import AiResponse, User
+from app.extensions import db
+from datetime import datetime
 from flask import current_app
-from datetime import date
+from typing import Optional, Dict, Any
+import json
 
-def save_ai_response(user, question: str, response: str, select_date: date = None):
+def save_ai_response(
+    user_id: int, 
+    question: str, 
+    response: str | Dict[str, Any], 
+    select_date: Optional[datetime.date] = None,
+    response_type: str = "chat"
+) -> Optional[AiResponse]:
     """
-    AI 응답을 데이터베이스에 저장.
+    AI 응답을 데이터베이스에 저장하는 함수
     
-    :param user_id: 사용자의 고유 ID
-    :param question: 질문 내용 (predefined prompt)
-    :param answer: AI의 응답
-    :param select_date: 선택된 날짜 (피드백 및 recommend에 해당)
+    Args:
+        user_id (int): 사용자 ID
+        question (str): 사용자의 질문 또는 요청
+        response (str | Dict): AI의 응답 (문자열 또는 구조화된 데이터)
+        select_date (datetime.date, optional): 선택된 날짜
+        response_type (str): 응답 유형 (chat, feedback, recommend)
     """
     try:
-        ai_resp = AiResponse(
-            user_id=user.user_id,
+        # 날짜 설정
+        if select_date is None:
+            select_date = datetime.now().date()
+
+        # 응답 데이터 처리
+        if isinstance(response, dict):
+            response_text = json.dumps(response, ensure_ascii=False)
+        else:
+            response_text = str(response)
+
+        # 응답 저장
+        ai_response = AiResponse(
+            user_id=user_id,
             question=question,
-            response=response,
-            select_date=select_date
+            response=response_text,
+            select_date=select_date,
+            response_type=response_type
         )
-        db.session.add(ai_resp)
+        
+        db.session.add(ai_response)
         db.session.commit()
+        
+        current_app.logger.info(
+            f"AI 응답 저장 완료 - "
+            f"user_id: {user_id}, "
+            f"type: {response_type}, "
+            f"date: {select_date}"
+        )
+        
+        return ai_response
+    
     except Exception as e:
-        # 예외 발생 시 로그에 기록
-        user_name = user.user_name if user else "Unknown"
-        current_app.logger.error(f"{user_name}의 응답 생성을 실패하였습니다. : {e}")
+        current_app.logger.error(
+            f"AI 응답 저장 실패 - "
+            f"user_id: {user_id}, "
+            f"error: {str(e)}"
+        )
+        db.session.rollback()
+        return None
