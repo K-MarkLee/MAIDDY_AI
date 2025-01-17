@@ -1,10 +1,8 @@
 # app/__init__.py
 
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
 from config import Config
-from app.extensions import db
+from app.extensions import db, migrate
 
 
 
@@ -16,8 +14,9 @@ def create_app(config_class=Config):
     app.config['SQLALCHEMY_DATABASE_URI'] = Config.SQLALCHEMY_DATABASE_URI
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
-    # DB 초기화
+    # DB와 Migrate 초기화
     db.init_app(app)
+    migrate.init_app(app, db)
 
     
     from app.routes.chatbot import chatbot_bp

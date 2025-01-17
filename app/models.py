@@ -69,7 +69,7 @@ class AiResponse(db.Model):
     response = db.Column(db.Text, nullable=False)
     select_date = db.Column(db.Date, nullable=False)
     response_type = db.Column(db.String(20), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now())
 
 
 
@@ -92,8 +92,8 @@ class UserPattern(db.Model):
     time_patterns = db.Column(db.JSON)
     success_patterns = db.Column(db.JSON)
     habit_streaks = db.Column(db.JSON)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now())
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.now(), onupdate=datetime.now())
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'analyzed_date', name='unique_user_date'),

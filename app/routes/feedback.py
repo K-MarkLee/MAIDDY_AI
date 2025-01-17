@@ -9,11 +9,11 @@ feedback_bp = Blueprint('feedback', __name__)
 llm_service = LLMService()
 
 @feedback_bp.route("/", methods=["POST"])
-async def get_feedback():
+async def feedback():
     try:
         data = request.get_json()
         user_id = data.get("user_id")
-        select_date = data.get("date")
+        select_date = data.get("select_date")
         
         if select_date:
             select_date = datetime.strptime(select_date, "%Y-%m-%d").date()

@@ -5,8 +5,8 @@ from app.utils.save_response import save_ai_response
 chatbot_bp = Blueprint('chatbot', __name__)
 llm_service = LLMService()
 
-@chatbot_bp.route("/chatbot", methods=["POST"])
-def chat():
+@chatbot_bp.route("/", methods=["POST"])
+async def chatbot():
     try:
         data = request.get_json()
         user_id = data.get("user_id")
@@ -18,8 +18,7 @@ def chat():
         if not query:
             return jsonify({"error": "Query is required"}), 400
             
-        import asyncio
-        response = asyncio.run(llm_service.chatbot(int(user_id), query))
+        response = await llm_service.chatbot(int(user_id), query)
         
         save_ai_response(
             user_id=int(user_id),
