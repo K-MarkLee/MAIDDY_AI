@@ -3,6 +3,7 @@ from sqlalchemy import create_engine, MetaData, Table
 from sqlalchemy.orm import sessionmaker
 import datetime
 import openai
+from decouple import config
 
 # 데이터베이스 설정
 DATABASE_URL = "postgresql://maiddy_admin:youngpotygotop123@db:5432/maiddy_db"  # Docker/DBeaver 연결 시 교체 필요
@@ -17,7 +18,7 @@ Diary = metadata.tables.get('diary')
 Checklist = metadata.tables.get('checklist')
 
 # OpenAI API 키 설정
-openai.api_key = "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"
+openai.api_key = config("OPENAI_API_KEY")
 
 # Flask 앱 설정
 app = Flask(__name__)
