@@ -13,10 +13,10 @@ async def chatbot():
         query = data.get("query")
         
         if not user_id:
-            return jsonify({"error": "User ID is required"}), 400
+            return jsonify({"error": "user_id가 필요합니다."}), 400
             
         if not query:
-            return jsonify({"error": "Query is required"}), 400
+            return jsonify({"error": "질문이 필요합니다."}), 400
             
         response = await llm_service.chatbot(int(user_id), query)
         
@@ -24,7 +24,7 @@ async def chatbot():
             user_id=int(user_id),
             question=query,
             response=response,
-            response_type="chat"
+            response_type="chatbot"
         )
             
         return jsonify({"response": response}), 200

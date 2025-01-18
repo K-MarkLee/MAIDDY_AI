@@ -98,7 +98,7 @@ class LLMService:
             current_app.logger.error(f"피드백 생성 중 오류: {str(e)}")
             raise
 
-    async def generate_recommendations(self, user_id: int) -> Dict:
+    async def generate_recommend(self, user_id: int) -> Dict:
         """패턴 기반 추천 생성"""
         try:
             # 1. 최신 패턴 데이터 조회

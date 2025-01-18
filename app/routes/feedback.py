@@ -15,10 +15,16 @@ async def feedback():
         user_id = data.get("user_id")
         select_date = data.get("select_date")
         
-        if select_date:
+        if not user_id:
+            return jsonify({"error": "user_id가 필요합니다."}), 400
+            
+        if not select_date:
+            return jsonify({"error": "select_date가 필요합니다."}), 400
+            
+        try:
             select_date = datetime.strptime(select_date, "%Y-%m-%d").date()
-        else:
-            select_date = datetime.now().date()
+        except ValueError:
+            return jsonify({"error": "select_date는 'YYYY-MM-DD' 형식이어야 합니다."}), 400
         
         feedback = await llm_service.generate_feedback(user_id, select_date)
         

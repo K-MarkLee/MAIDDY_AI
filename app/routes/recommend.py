@@ -7,13 +7,13 @@ from app.utils.save_response import save_ai_response
 recommend_bp = Blueprint('recommend', __name__)
 llm_service = LLMService()
 
-@recommend_bp.route("/", methods=["POST"])
-async def get_recommendations():
+@recommend_bp.route("/", methods=["GET"])
+async def recommend():
     try:
         data = request.get_json()
         user_id = data.get("user_id")
         
-        recommendations = await llm_service.generate_recommendations(user_id)
+        recommendations = await llm_service.generate_recommend(user_id)
         
         save_ai_response(
             user_id=user_id,
