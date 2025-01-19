@@ -2,6 +2,9 @@
 
 from app.extensions import db
 from datetime import datetime
+from sqlalchemy.dialects.postgresql import ARRAY
+from pgvector.sqlalchemy import Vector
+from app import db
 
 
 
@@ -20,6 +23,7 @@ class User(db.Model):
     ai_responses = db.relationship('AiResponse', backref='user', lazy=True)
     summaries = db.relationship('Summary', backref='user', lazy=True)
     patterns = db.relationship('UserPattern', backref='user', lazy=True)
+    embeddings = db.relationship('Embedding', backref='user', lazy=True)
 
 
 
@@ -69,7 +73,6 @@ class AiResponse(db.Model):
     response = db.Column(db.Text, nullable=False)
     select_date = db.Column(db.Date, nullable=False)
     response_type = db.Column(db.String(20), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now())
 
 
 
@@ -83,18 +86,19 @@ class Summary(db.Model):
     select_date = db.Column(db.Date, nullable=False)
 
 
-class UserPattern(db.Model):
-    __tablename__ = 'user_patterns'
+class Embedding(db.Model):
+    """텍스트 임베딩을 저장하는 모델"""
+    __tablename__ = 'embeddings'
+    
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
-    analyzed_date = db.Column(db.Date, nullable=False)
-    activity_patterns = db.Column(db.JSON)
-    time_patterns = db.Column(db.JSON)
-    success_patterns = db.Column(db.JSON)
-    habit_streaks = db.Column(db.JSON)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now())
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.now(), onupdate=datetime.now())
+    text = db.Column(db.Text, nullable=False)
+    embedding = db.Column(Vector(1536))  # OpenAI의 text-embedding-ada-002 모델은 1536 차원
+    metadata = db.Column(db.JSON)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref=db.backref('embeddings', lazy=True))
 
     __table_args__ = (
-        db.UniqueConstraint('user_id', 'analyzed_date', name='unique_user_date'),
+        db.Index('ix_embeddings_embedding', 'embedding', postgresql_using='ivfflat'),
     )

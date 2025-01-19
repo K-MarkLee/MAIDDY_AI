@@ -2,27 +2,26 @@
 
 from flask import Blueprint, request, jsonify, current_app
 from app.utils.llm_service import LLMService
-from app.utils.save_response import save_ai_response
 
 recommend_bp = Blueprint('recommend', __name__)
 llm_service = LLMService()
 
-@recommend_bp.route("/", methods=["GET"])
-async def recommend():
+@recommend_bp.route("/", methods=["POST"])
+def recommend():
     try:
         data = request.get_json()
         user_id = data.get("user_id")
         
-        recommendations = await llm_service.generate_recommend(user_id)
+        if not user_id:
+            return jsonify({"error": "user_id가 필요합니다."}), 400
         
-        save_ai_response(
-            user_id=user_id,
-            question="추천 요청",
-            response=recommendations,
-            response_type="recommend"
-        )
+        # 일정 추천 생성
+        recommendations = llm_service.recommend_schedule(int(user_id))
             
-        return jsonify(recommendations), 200
+        return jsonify({
+            "success": True,
+            "recommendations": recommendations
+        }), 200
         
     except Exception as e:
         current_app.logger.error(f"Recommendation error: {str(e)}")
