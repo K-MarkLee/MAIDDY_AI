@@ -5,7 +5,6 @@ MAIDDY AI 애플리케이션의 메인 초기화 모듈
 from flask import Flask, jsonify
 from config import Config
 from app.extensions import db, migrate
-from app.utils.constants import ERROR_MESSAGES
 
 
 def create_app(config_class=Config):
