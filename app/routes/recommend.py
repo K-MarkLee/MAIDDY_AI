@@ -19,7 +19,7 @@ def create_recommendation():
     
     if not success:
         return jsonify({'success': False, 'message': response}), 400
-        
+    
     return jsonify({
         'success': True,
         'message': '추천 생성 성공',

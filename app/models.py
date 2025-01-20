@@ -81,7 +81,7 @@ class CleanedData(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
     select_date = db.Column(db.Date, nullable=False)
     cleaned_text = db.Column(db.Text, nullable=False)
-
+    
 
 class Summary(db.Model):
     __tablename__ = 'summaries'
@@ -91,6 +91,11 @@ class Summary(db.Model):
     type = db.Column(db.String(50), nullable=False)  # monthly, weekly
     start_date = db.Column(db.Date, nullable=False)  # 요약 시작일
     end_date = db.Column(db.Date, nullable=False)    # 요약 종료일
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    
+    __table_args__ = (
+        db.Index('idx_summary_user_type_dates', 'user_id', 'type', 'start_date', 'end_date'),
+    )
 
 
 class Embedding(db.Model):
@@ -101,6 +106,11 @@ class Embedding(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
     summary_id = db.Column(db.Integer, db.ForeignKey('summaries.id'), nullable=False)
     type = db.Column(db.String(50), nullable=False)  # 'weekly' or 'monthly'
-    embedding = db.Column(Vector(1536))
+    embedding = db.Column(Vector(current_app.config.get('EMBEDDING_SIZE', 1536)))
     start_date = db.Column(db.Date, nullable=False)  # 임베딩 시작일
     end_date = db.Column(db.Date, nullable=False)    # 임베딩 종료일
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    
+    __table_args__ = (
+        db.Index('idx_embedding_user_type_dates', 'user_id', 'type', 'start_date', 'end_date'),
+    )

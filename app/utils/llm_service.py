@@ -1,65 +1,104 @@
 from datetime import datetime, timedelta
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List, Optional
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
-from app.models import Todo, Diary, Schedule, CleanedData, Feedback
+from app.models import Todo, Diary, Schedule, CleanedData, Feedback, Summary, Embedding
 from app.extensions import db
 from flask import current_app
+from app.utils.embedding import EmbeddingService
 
 class LLMService:
     def __init__(self):
-        self.llm = None
+        self.chat_model = None
+        self.embedding_service = None
         
     def _init_model(self):
-        """LLM 모델 초기화"""
-        if not self.llm:
-            self.llm = ChatOpenAI(
+        """모델 초기화"""
+        if not self.chat_model:
+            self.chat_model = ChatOpenAI(
                 model=current_app.config['OPENAI_MODEL'],
                 temperature=current_app.config['OPENAI_TEMPERATURE'],
                 api_key=current_app.config['OPENAI_API_KEY']
             )
+            
+    def _init_embedding_service(self):
+        """임베딩 서비스 초기화"""
+        if not self.embedding_service:
+            self.embedding_service = EmbeddingService()
 
-    def get_daily_data(self, user_id: int, select_date: datetime.date) -> Tuple[bool, Dict, str]:
+    def _get_similar_summaries(self, user_id: int, query: str, limit: int = 3) -> List[str]:
+        """유사한 주간 요약 검색"""
+        self._init_embedding_service()
+        
+        try:
+            # 쿼리 임베딩 생성
+            query_embedding = self.embedding_service._create_embedding(query)
+            
+            # Vector 검색
+            similar_summaries = Embedding.query.filter_by(
+                user_id=user_id,
+                type='weekly'
+            ).order_by(
+                Embedding.embedding.cosine_distance(query_embedding)
+            ).limit(limit).all()
+            
+            # 관련 Summary 텍스트 가져오기
+            summary_texts = []
+            for emb in similar_summaries:
+                summary = Summary.query.get(emb.summary_id)
+                if summary:
+                    summary_texts.append(f"{summary.start_date.strftime('%Y-%m-%d')}~{summary.end_date.strftime('%Y-%m-%d')}: {summary.summary_text}")
+            
+            return summary_texts
+        except Exception as e:
+            current_app.logger.error(f"Error in _get_similar_summaries: {str(e)}")
+            return []
+
+    def get_daily_data(self, user_id: int, select_date: datetime.date) -> Tuple[bool, Optional[Dict], str]:
         """사용자의 일일 데이터 조회
         
         Returns:
-            Tuple[bool, Dict, str]: (성공 여부, 데이터 딕셔너리, 메시지)
+            Tuple[bool, Optional[Dict], str]: (성공 여부, 데이터 딕셔너리, 메시지)
         """
-        # Todo 데이터 조회
-        todos = Todo.query.filter_by(
-            user_id=user_id,
-            select_date=select_date
-        ).all()
-        
-        # Diary 데이터 조회
-        diary = Diary.query.filter_by(
-            user_id=user_id,
-            select_date=select_date
-        ).first()
-        
-        # Schedule 데이터 조회
-        schedules = Schedule.query.filter_by(
-            user_id=user_id,
-            select_date=select_date
-        ).all()
-        
-        # 필수 데이터 체크
-        if not todos:
-            return False, {}, f"{select_date.strftime('%Y-%m-%d')}의 할 일 데이터가 없습니다."
-        
-        if not diary:
-            return False, {}, f"{select_date.strftime('%Y-%m-%d')}의 일기 데이터가 없습니다."
-        
-        if not schedules:
-            return False, {}, f"{select_date.strftime('%Y-%m-%d')}의 일정 데이터가 없습니다."
-        
-        data = {
-            'todos': [{'content': todo.content, 'is_completed': todo.is_completed} for todo in todos],
-            'diary': diary.content,
-            'schedules': [{'title': schedule.title, 'content': schedule.content} for schedule in schedules]
-        }
-        
-        return True, data, "데이터 조회 성공"
+        try:
+            # Todo 데이터 조회
+            todos = Todo.query.filter_by(
+                user_id=user_id,
+                select_date=select_date
+            ).all()
+            
+            # Diary 데이터 조회
+            diary = Diary.query.filter_by(
+                user_id=user_id,
+                select_date=select_date
+            ).first()
+            
+            # Schedule 데이터 조회
+            schedules = Schedule.query.filter_by(
+                user_id=user_id,
+                select_date=select_date
+            ).all()
+            
+            # 필수 데이터 체크
+            if not todos:
+                return False, None, f"{select_date.strftime('%Y-%m-%d')}의 할 일 데이터가 없습니다."
+            
+            if not diary:
+                return False, None, f"{select_date.strftime('%Y-%m-%d')}의 일기 데이터가 없습니다."
+            
+            if not schedules:
+                return False, None, f"{select_date.strftime('%Y-%m-%d')}의 일정 데이터가 없습니다."
+            
+            data = {
+                'todos': [{'content': todo.content, 'is_completed': todo.is_completed} for todo in todos],
+                'diary': diary.content,
+                'schedules': [{'title': schedule.title, 'content': schedule.content} for schedule in schedules]
+            }
+            
+            return True, data, "데이터 조회 성공"
+        except Exception as e:
+            current_app.logger.error(f"Error in get_daily_data: {str(e)}")
+            return False, None, "데이터 조회 중 오류가 발생했습니다."
 
     def clean_daily_data(self, user_id: int, select_date: datetime.date) -> Tuple[bool, str]:
         """일일 데이터 전처리 및 저장"""
@@ -117,7 +156,16 @@ class LLMService:
         """챗봇 응답 생성"""
         self._init_model()
         
-        # 오늘 날짜의 CleanedData 조회
+        # 컨텍스트 수집
+        contexts = []
+        
+        # 1. Vector 검색으로 유사한 주간 요약 찾기
+        similar_summaries = self._get_similar_summaries(user_id, question)
+        if similar_summaries:
+            contexts.append("관련된 과거 주간 요약:")
+            contexts.extend(similar_summaries)
+        
+        # 2. 오늘 데이터 처리
         today = datetime.now().date()
         cleaned_data = CleanedData.query.filter_by(
             user_id=user_id,
@@ -136,73 +184,88 @@ class LLMService:
                 ).first()
                 
                 if not cleaned_data:
-                    # 어제 데이터 생성 시도
-                    success, cleaned_text = self.clean_daily_data(user_id, yesterday)
-                    if not success:
-                        return False, "최소 하루의 데이터가 필요합니다."
-                else:
-                    cleaned_text = cleaned_data.cleaned_text
-                    
-                context = f"어제의 데이터:\n{cleaned_text}\n\n질문: {question}"
+                    return False, "최소 하루의 데이터가 필요합니다."
             else:
-                context = f"오늘의 데이터:\n{cleaned_text}\n\n질문: {question}"
+                contexts.append(f"\n오늘의 데이터:\n{cleaned_text}")
         else:
             cleaned_text = cleaned_data.cleaned_text
-            context = f"오늘의 데이터:\n{cleaned_text}\n\n질문: {question}"
+            contexts.append(f"\n오늘의 데이터:\n{cleaned_text}")
         
+        # 3. 모든 일일 데이터 가져오기
+        all_data = CleanedData.query.filter_by(
+            user_id=user_id
+        ).order_by(CleanedData.select_date.desc()).all()
+        
+        if all_data:
+            contexts.append("\n과거 데이터:")
+            for data in all_data:
+                if data.select_date != today:  # 오늘 데이터는 이미 추가했으므로 제외
+                    contexts.append(f"{data.select_date.strftime('%Y-%m-%d')}의 데이터:\n{data.cleaned_text}")
+        
+        # 시스템 프롬프트 설정
         system_prompt = """
         당신은 사용자의 일상을 관리해주는 AI 비서입니다.
         사용자의 일기, 할 일, 일정 데이터를 기반으로 자연스럽게 대화하며 도움을 제공해주세요.
         항상 친절하고 공감적인 태도를 유지하면서, 실질적인 도움이 되는 답변을 제공해주세요.
         """
         
+        # 메시지 구성: 시스템 프롬프트, 컨텍스트, 사용자 질문
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(content=context)
+            SystemMessage(content="\n".join(contexts)),
+            HumanMessage(content=question)
         ]
         
-        response = self.llm.predict_messages(messages)
+        response = self.chat_model.invoke(messages)
         return True, response.content
 
     def create_feedback(self, user_id: int, select_date: datetime.date) -> Tuple[bool, str]:
         """일일 피드백 생성"""
         self._init_model()
         
-        # CleanedData 조회
+        # 컨텍스트 수집
+        contexts = []
+        
+        # 1. 모든 주간 요약 가져오기
+        summaries = Summary.query.filter_by(
+            user_id=user_id,
+            type='weekly'
+        ).order_by(Summary.end_date.desc()).all()
+        
+        if summaries:
+            contexts.append("주간 요약:")
+            for summary in summaries:
+                contexts.append(f"{summary.start_date.strftime('%Y-%m-%d')}~{summary.end_date.strftime('%Y-%m-%d')}: {summary.summary_text}")
+        
+        # 2. 선택된 날짜의 데이터 처리
         cleaned_data = CleanedData.query.filter_by(
             user_id=user_id,
             select_date=select_date
         ).first()
         
         if not cleaned_data:
-            # 오늘 데이터 생성 시도
+            # 데이터 생성 시도
             success, cleaned_text = self.clean_daily_data(user_id, select_date)
             if not success:
-                # 어제 데이터 확인
-                yesterday = select_date - timedelta(days=1)
-                cleaned_data = CleanedData.query.filter_by(
-                    user_id=user_id,
-                    select_date=yesterday
-                ).first()
-                
-                if not cleaned_data:
-                    # 어제 데이터 생성 시도
-                    success, cleaned_text = self.clean_daily_data(user_id, yesterday)
-                    if not success:
-                        return False, "최소 하루의 데이터가 필요합니다."
-                else:
-                    cleaned_text = cleaned_data.cleaned_text
-                    
-                context = f"어제의 데이터를 기반으로 피드백을 생성합니다:\n{cleaned_text}"
-                use_date = yesterday
+                return False, "선택한 날짜의 데이터를 생성할 수 없습니다."
             else:
-                context = f"오늘의 데이터를 기반으로 피드백을 생성합니다:\n{cleaned_text}"
-                use_date = select_date
+                contexts.append(f"\n{select_date.strftime('%Y-%m-%d')}의 데이터:\n{cleaned_text}")
         else:
             cleaned_text = cleaned_data.cleaned_text
-            context = f"오늘의 데이터를 기반으로 피드백을 생성합니다:\n{cleaned_text}"
-            use_date = select_date
+            contexts.append(f"\n{select_date.strftime('%Y-%m-%d')}의 데이터:\n{cleaned_text}")
         
+        # 3. 모든 일일 데이터 가져오기
+        all_data = CleanedData.query.filter_by(
+            user_id=user_id
+        ).order_by(CleanedData.select_date.desc()).all()
+        
+        if all_data:
+            contexts.append("\n과거 데이터:")
+            for data in all_data:
+                if data.select_date != select_date:  # 선택된 날짜의 데이터는 이미 추가했으므로 제외
+                    contexts.append(f"{data.select_date.strftime('%Y-%m-%d')}의 데이터:\n{data.cleaned_text}")
+        
+        # 시스템 프롬프트 설정
         system_prompt = """
         사용자의 하루 데이터를 분석하여 다음과 같은 피드백을 제공해주세요:
         1. 할 일 완료율과 성취도 분석
@@ -212,21 +275,23 @@ class LLMService:
         5. 전반적인 하루 평가와 격려의 메시지
         
         피드백은 항상 긍정적이고 동기부여가 되는 톤을 유지하면서, 구체적이고 실천 가능한 제안을 포함해야 합니다.
+        이전 주의 요약이 있다면 이를 참고하여 변화나 패턴을 파악하고 언급해주세요.
         """
         
+        # 메시지 구성: 시스템 프롬프트와 컨텍스트
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(content=context)
+            HumanMessage(content="\n".join(contexts))
         ]
         
-        response = self.llm.predict_messages(messages)
+        response = self.chat_model.invoke(messages)
         feedback_text = response.content
         
         # Feedback 모델에 저장
         feedback = Feedback(
             user_id=user_id,
             feedback=feedback_text,
-            select_date=use_date
+            select_date=select_date
         )
         db.session.add(feedback)
         db.session.commit()
@@ -237,7 +302,21 @@ class LLMService:
         """일정 추천 생성"""
         self._init_model()
         
-        # 오늘 날짜로 CleanedData 조회
+        # 컨텍스트 수집
+        contexts = []
+        
+        # 1. 모든 주간 요약 가져오기
+        summaries = Summary.query.filter_by(
+            user_id=user_id,
+            type='weekly'
+        ).order_by(Summary.end_date.desc()).all()
+        
+        if summaries:
+            contexts.append("주간 요약:")
+            for summary in summaries:
+                contexts.append(f"{summary.start_date.strftime('%Y-%m-%d')}~{summary.end_date.strftime('%Y-%m-%d')}: {summary.summary_text}")
+        
+        # 2. 오늘 데이터 처리
         today = datetime.now().date()
         cleaned_data = CleanedData.query.filter_by(
             user_id=user_id,
@@ -256,20 +335,25 @@ class LLMService:
                 ).first()
                 
                 if not cleaned_data:
-                    # 어제 데이터 생성 시도
-                    success, cleaned_text = self.clean_daily_data(user_id, yesterday)
-                    if not success:
-                        return False, "최소 하루의 데이터가 필요합니다."
-                else:
-                    cleaned_text = cleaned_data.cleaned_text
-                    
-                context = f"어제의 데이터를 기반으로 추천을 생성합니다:\n{cleaned_text}"
+                    return False, "최소 하루의 데이터가 필요합니다."
             else:
-                context = f"오늘의 데이터를 기반으로 추천을 생성합니다:\n{cleaned_text}"
+                contexts.append(f"\n오늘의 데이터:\n{cleaned_text}")
         else:
             cleaned_text = cleaned_data.cleaned_text
-            context = f"오늘의 데이터를 기반으로 추천을 생성합니다:\n{cleaned_text}"
+            contexts.append(f"\n오늘의 데이터:\n{cleaned_text}")
         
+        # 3. 모든 일일 데이터 가져오기
+        all_data = CleanedData.query.filter_by(
+            user_id=user_id
+        ).order_by(CleanedData.select_date.desc()).all()
+        
+        if all_data:
+            contexts.append("\n과거 데이터:")
+            for data in all_data:
+                if data.select_date != today:  # 오늘 데이터는 이미 추가했으므로 제외
+                    contexts.append(f"{data.select_date.strftime('%Y-%m-%d')}의 데이터:\n{data.cleaned_text}")
+        
+        # 시스템 프롬프트 설정
         system_prompt = """
         사용자의 하루 데이터를 분석하여 다음과 같은 추천을 제공해주세요:
         1. 현재 일정과 할 일을 고려한 시간 관리 제안
@@ -279,24 +363,23 @@ class LLMService:
         5. 건강과 웰빙을 위한 제안
         
         추천은 구체적이고 실천 가능해야 하며, 사용자의 현재 상황과 일정을 고려하여 제시되어야 합니다.
+        이전 주의 요약이 있다면 이를 참고하여 사용자의 선호도와 패턴을 고려한 추천을 해주세요.
         """
         
+        # 메시지 구성: 시스템 프롬프트와 컨텍스트
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(content=context)
+            HumanMessage(content="\n".join(contexts))
         ]
         
-        response = self.llm.predict_messages(messages)
+        response = self.chat_model.invoke(messages)
         return True, response.content
 
     def _preprocess_text(self, text: str) -> str:
         """LLM을 사용한 텍스트 전처리"""
         system_prompt = """
-        주어진 텍스트를 다음과 같이 전처리하세요:
-        1. 불필요한 특수문자나 중복된 공백 제거
-        2. 문장을 자연스럽게 연결
-        3. 중요한 정보는 유지하면서 간결하게 정리
-        4. 시간순으로 정리
+        입력된 텍스트를 자연스럽게 정리해주세요. 
+        중요한 내용은 유지하면서, 불필요한 부분은 제거하고 문장을 매끄럽게 다듬어주세요.
         """
         
         messages = [
@@ -304,5 +387,5 @@ class LLMService:
             HumanMessage(content=text)
         ]
         
-        response = self.llm.predict_messages(messages)
+        response = self.chat_model.invoke(messages)
         return response.content
