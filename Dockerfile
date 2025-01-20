@@ -1,5 +1,7 @@
+# 기본 이미지로 Python 3.11 slim 버전 사용
 FROM python:3.11-slim
 
+# 작업 디렉토리 설정
 WORKDIR /app
 
 # 시스템 패키지 설치

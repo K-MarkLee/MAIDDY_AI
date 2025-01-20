@@ -1,459 +1,308 @@
+from datetime import datetime, timedelta
+from typing import Dict, Tuple
 from langchain.chat_models import ChatOpenAI
-from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.chains import ConversationChain
-from langchain.memory import ConversationBufferMemory
-from langchain.prompts import PromptTemplate
-from app.utils.chatbot_func import ChatbotFunction
-from app.models import User, Schedule, Todo, Summary, Diary, AiResponse, Embedding
-from sqlalchemy import and_
-import os
-from datetime import datetime, date, timedelta
-import json
-import numpy as np
-
-# OpenAI API 키 설정
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-# 시스템 프롬프트 설정
-SYSTEM_PROMPT = """안녕하세요! 저는 MAIDDY예요! ✨
-당신의 일상을 함께하는 작은 요정 비서랍니다! 🧚‍♀️
-
-제가 도와드릴 수 있는 일들이에요:
-🌟 소중한 일정 관리
-🎯 즐거운 할일 체크
-📝 특별한 일기 작성
-💝 따뜻한 피드백과 추천
-
-항상 밝고 귀엽게, 하지만 프로페셔널하게 도와드릴게요!
-함께 즐거운 하루를 만들어보아요! 💕"""
+from langchain.schema import SystemMessage, HumanMessage
+from app.models import Todo, Diary, Schedule, CleanedData, Feedback
+from app.extensions import db
+from flask import current_app
 
 class LLMService:
     def __init__(self):
-        self.llm = ChatOpenAI(
-            model_name="gpt-4o-mini",
-            openai_api_key=OPENAI_API_KEY,
-            temperature=0.7
-        )
-        self.embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
-        self.memory = ConversationBufferMemory()
-        self.chatbot_func = ChatbotFunction(self.llm)
-        self.last_memory_cleanup = datetime.now().date()
+        self.llm = None
+        
+    def _init_model(self):
+        """LLM 모델 초기화"""
+        if not self.llm:
+            self.llm = ChatOpenAI(
+                model=current_app.config['OPENAI_MODEL'],
+                temperature=current_app.config['OPENAI_TEMPERATURE'],
+                api_key=current_app.config['OPENAI_API_KEY']
+            )
 
-    def cleanup_memory(self):
-        """하루가 지나면 대화 기록을 정리하는 메서드"""
-        current_date = datetime.now().date()
-        if current_date > self.last_memory_cleanup:
-            self.memory.clear()
-            self.last_memory_cleanup = current_date
+    def get_daily_data(self, user_id: int, select_date: datetime.date) -> Tuple[bool, Dict, str]:
+        """사용자의 일일 데이터 조회
+        
+        Returns:
+            Tuple[bool, Dict, str]: (성공 여부, 데이터 딕셔너리, 메시지)
+        """
+        # Todo 데이터 조회
+        todos = Todo.query.filter_by(
+            user_id=user_id,
+            select_date=select_date
+        ).all()
+        
+        # Diary 데이터 조회
+        diary = Diary.query.filter_by(
+            user_id=user_id,
+            select_date=select_date
+        ).first()
+        
+        # Schedule 데이터 조회
+        schedules = Schedule.query.filter_by(
+            user_id=user_id,
+            select_date=select_date
+        ).all()
+        
+        # 필수 데이터 체크
+        if not todos:
+            return False, {}, f"{select_date.strftime('%Y-%m-%d')}의 할 일 데이터가 없습니다."
+        
+        if not diary:
+            return False, {}, f"{select_date.strftime('%Y-%m-%d')}의 일기 데이터가 없습니다."
+        
+        if not schedules:
+            return False, {}, f"{select_date.strftime('%Y-%m-%d')}의 일정 데이터가 없습니다."
+        
+        data = {
+            'todos': [{'content': todo.content, 'is_completed': todo.is_completed} for todo in todos],
+            'diary': diary.content,
+            'schedules': [{'title': schedule.title, 'content': schedule.content} for schedule in schedules]
+        }
+        
+        return True, data, "데이터 조회 성공"
 
-    def get_user_name(self, user_id: int) -> str:
-        """사용자 이름을 가져오는 메서드"""
-        user = User.query.get(user_id)
-        return user.username if user else "친구"
-
-    def get_context_data(self, user_id: int, current_date: date) -> str:
-        """사용자의 과거 데이터를 가져오는 메서드"""
+    def clean_daily_data(self, user_id: int, select_date: datetime.date) -> Tuple[bool, str]:
+        """일일 데이터 전처리 및 저장"""
+        self._init_model()
+        
         try:
-            # 일정 데이터 가져오기
-            schedules = Schedule.query.filter(
-                Schedule.user_id == user_id,
-                Schedule.select_date <= current_date
-            ).order_by(Schedule.select_date.desc()).limit(5).all()
+            # 데이터 조회
+            success, daily_data, message = self.get_daily_data(user_id, select_date)
+            if not success:
+                return False, message
             
-            # 할일 데이터 가져오기
-            todos = Todo.query.filter(
-                Todo.user_id == user_id,
-                Todo.select_date <= current_date
-            ).order_by(Todo.select_date.desc()).limit(5).all()
+            # 데이터 텍스트 형식으로 변환
+            text_content = []
             
-            context = []
-            if schedules:
-                schedule_text = "✨ 최근 일정:\n" + "\n".join([
-                    f"🌟 {s.select_date} - {s.title} ({s.time})" 
-                    for s in schedules
-                ])
-                context.append(schedule_text)
+            text_content.append(f"일기: {daily_data['diary']}")
             
-            if todos:
-                todo_text = "✨ 최근 할일:\n" + "\n".join([
-                    f"🎯 {t.select_date} - {t.content}"
-                    for t in todos
-                ])
-                context.append(todo_text)
+            todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
+                         for todo in daily_data['todos']]
+            text_content.append("할 일 목록:\n" + "\n".join(todo_texts))
             
-            return "\n\n".join(context)
-        except Exception as e:
-            return f"앗! 데이터를 가져오는 중에 문제가 생겼어요 😢: {str(e)}"
-
-    def get_chat_response(self, user_id: int, question: str):
-        """사용자의 질문에 대한 응답을 생성하는 메서드"""
-        # 메모리 정리 체크
-        self.cleanup_memory()
-        
-        username = self.get_user_name(user_id)
-        
-        # 사용자의 과거 데이터 확인
-        current_date = datetime.now().date()
-        context_data = self.get_context_data(user_id, current_date)
-        has_past_data = bool(context_data.strip())
-        
-        # 일정 또는 할일 관련 요청인지 확인
-        is_schedule_request = any(keyword in question.lower() for keyword in ["일정", "schedule", "약속"])
-        is_todo_request = any(keyword in question.lower() for keyword in ["할일", "todo", "해야할", "해야 할"])
-        
-        # 요청 유형 확인
-        is_add_request = any(keyword in question.lower() for keyword in ["추가", "등록", "만들어", "잡아", "넣어"])
-        is_update_request = any(keyword in question.lower() for keyword in ["수정", "변경", "바꿔", "업데이트"])
-        is_delete_request = any(keyword in question.lower() for keyword in ["삭제", "제거", "지워", "취소"])
-        
-        # 일정/할일 추가 요청 처리
-        if is_add_request and (is_schedule_request or is_todo_request):
-            if is_schedule_request:
-                schedule_info = self.chatbot_func.extract_schedule_info(question)
-                if schedule_info:
-                    success, message = self.chatbot_func.add_schedule(user_id, schedule_info)
-                    return message
-                else:
-                    return (
-                        "앗! 일정 정보를 정확히 이해하지 못했어요 😅\n"
-                        "이렇게 말씀해 주시면 더 잘 이해할 수 있을 것 같아요:\n"
-                        "✨ '내일 오후 2시에 병원 예약이 있어'\n"
-                        "✨ '다음 주 월요일 아침 9시에 팀 미팅 일정 추가해줘'"
-                    )
-            elif is_todo_request:
-                todo_info = self.chatbot_func.extract_todo_info(question)
-                if todo_info:
-                    success, message = self.chatbot_func.add_todo(user_id, todo_info)
-                    return message
-                else:
-                    return (
-                        "앗! 할일 정보를 정확히 이해하지 못했어요 😅\n"
-                        "이렇게 말씀해 주시면 더 잘 이해할 수 있을 것 같아요:\n"
-                        "✨ '내일까지 보고서 작성하기'\n"
-                        "✨ '오늘 할일로 이메일 답장하기 추가해줘'"
-                    )
-        
-        # 일정/할일 수정 요청 처리
-        elif is_update_request and (is_schedule_request or is_todo_request):
-            if is_schedule_request:
-                schedule, error_message = self.chatbot_func.find_schedule(user_id, question)
-                if schedule:
-                    schedule_info = self.chatbot_func.extract_schedule_info(question)
-                    if schedule_info:
-                        success, message = self.chatbot_func.update_schedule(user_id, schedule.id, schedule_info)
-                        return message
-                    else:
-                        return (
-                            "앗! 수정할 일정 정보를 정확히 이해하지 못했어요 😅\n"
-                            "이렇게 말씀해 주시면 더 잘 이해할 수 있을 것 같아요:\n"
-                            "✨ '오늘 2시 병원 예약을 3시로 변경해줘'\n"
-                            "✨ '내일 팀 미팅 시간을 오후 2시로 수정해줘'"
-                        )
-                else:
-                    return error_message
-            elif is_todo_request:
-                todo, error_message = self.chatbot_func.find_todo(user_id, question)
-                if todo:
-                    todo_info = self.chatbot_func.extract_todo_info(question)
-                    if todo_info:
-                        success, message = self.chatbot_func.update_todo(user_id, todo.id, todo_info)
-                        return message
-                    else:
-                        return (
-                            "앗! 수정할 할일 정보를 정확히 이해하지 못했어요 😅\n"
-                            "이렇게 말씀해 주시면 더 잘 이해할 수 있을 것 같아요:\n"
-                            "✨ '보고서 작성 마감일을 다음주로 변경해줘'\n"
-                            "✨ '이메일 답장 할일을 내일로 미뤄줘'"
-                        )
-                else:
-                    return error_message
-        
-        # 일반적인 대화인지 확인
-        general_conversation = not any(keyword in question.lower() for keyword in [
-            "일정", "할일", "todo", "schedule", "diary", "일기", 
-            "피드백", "feedback", "recommend", "추천"
-        ])
-        
-        if general_conversation:
-            return (
-                f"{username}님, 안녕하세요! 저는 요정 비서 MAIDDY예요! ✨\n"
-                "제가 도와드릴 수 있는 일들을 소개해드릴게요:\n\n"
-                "🌟 일정이나 할일을 추가하고 관리해드려요\n"
-                "📝 소중한 일기도 함께 써요\n"
-                "💝 당신의 하루를 더 특별하게 만들어드릴게요\n"
-                "✨ 생산성 향상을 위한 귀여운 조언도 해드려요\n\n"
-                "어떤 것을 도와드릴까요? 😊"
-            )
-        
-        # 관련 데이터 검색
-        similar_texts = self.get_similar_texts(question, user_id)
-        historical_context = "\n\n".join([text for text, _ in similar_texts]) if similar_texts else ""
-        
-        if has_past_data:
-            # 기존 사용자용 프롬프트
-            chat_prompt = PromptTemplate(
-                input_variables=["system_prompt", "username", "context", "question"],
-                template=(
-                    "{system_prompt}\n\n"
-                    "소중한 {username}님의 과거 데이터를 바탕으로 답변드릴게요! ✨\n"
-                    "컨텍스트: {context}\n\n"
-                    "질문: {question}"
+            schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
+                            for schedule in daily_data['schedules']]
+            text_content.append("일정 목록:\n" + "\n".join(schedule_texts))
+            
+            combined_text = "\n\n".join(text_content)
+            
+            try:
+                # LLM을 통한 텍스트 전처리
+                cleaned_text = self._preprocess_text(combined_text)
+            except Exception as e:
+                current_app.logger.error(f"OpenAI API error: {str(e)}")
+                return False, "텍스트 전처리 중 오류가 발생했습니다."
+            
+            try:
+                # CleanedData에 저장
+                cleaned_data = CleanedData(
+                    user_id=user_id,
+                    select_date=select_date,
+                    cleaned_text=cleaned_text
                 )
-            )
+                db.session.add(cleaned_data)
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"Database error: {str(e)}")
+                return False, "데이터 저장 중 오류가 발생했습니다."
+            
+            return True, cleaned_text
+            
+        except Exception as e:
+            current_app.logger.error(f"Unexpected error in clean_daily_data: {str(e)}")
+            return False, "데이터 처리 중 오류가 발생했습니다."
+
+    def get_chat_response(self, user_id: int, question: str) -> Tuple[bool, str]:
+        """챗봇 응답 생성"""
+        self._init_model()
+        
+        # 오늘 날짜의 CleanedData 조회
+        today = datetime.now().date()
+        cleaned_data = CleanedData.query.filter_by(
+            user_id=user_id,
+            select_date=today
+        ).first()
+        
+        if not cleaned_data:
+            # 오늘 데이터 생성 시도
+            success, cleaned_text = self.clean_daily_data(user_id, today)
+            if not success:
+                # 어제 데이터 확인
+                yesterday = today - timedelta(days=1)
+                cleaned_data = CleanedData.query.filter_by(
+                    user_id=user_id,
+                    select_date=yesterday
+                ).first()
+                
+                if not cleaned_data:
+                    # 어제 데이터 생성 시도
+                    success, cleaned_text = self.clean_daily_data(user_id, yesterday)
+                    if not success:
+                        return False, "최소 하루의 데이터가 필요합니다."
+                else:
+                    cleaned_text = cleaned_data.cleaned_text
+                    
+                context = f"어제의 데이터:\n{cleaned_text}\n\n질문: {question}"
+            else:
+                context = f"오늘의 데이터:\n{cleaned_text}\n\n질문: {question}"
         else:
-            # 첫 사용자용 프롬프트
-            chat_prompt = PromptTemplate(
-                input_variables=["system_prompt", "username", "question"],
-                template=(
-                    "{system_prompt}\n\n"
-                    "와아! {username}님과 함께하는 첫 날이네요! 🎉\n"
-                    "지금은 일정과 할일 추가를 도와드릴 수 있어요!\n"
-                    "더 많은 추억을 쌓으면서 더 다양한 방법으로 도와드릴 수 있을 거예요! ✨\n\n"
-                    "질문: {question}\n\n"
-                    "어떤 일정이나 할일을 함께 기록해볼까요? 💝"
-                )
-            )
+            cleaned_text = cleaned_data.cleaned_text
+            context = f"오늘의 데이터:\n{cleaned_text}\n\n질문: {question}"
         
-        # 응답 생성
-        chain = ConversationChain(
-            llm=self.llm,
-            prompt=chat_prompt,
-            memory=self.memory
-        )
+        system_prompt = """
+        당신은 사용자의 일상을 관리해주는 AI 비서입니다.
+        사용자의 일기, 할 일, 일정 데이터를 기반으로 자연스럽게 대화하며 도움을 제공해주세요.
+        항상 친절하고 공감적인 태도를 유지하면서, 실질적인 도움이 되는 답변을 제공해주세요.
+        """
         
-        if has_past_data:
-            response = chain.predict(
-                system_prompt=SYSTEM_PROMPT,
-                username=username,
-                context=context_data + "\n\n과거 기록:\n" + historical_context,
-                question=question
-            )
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=context)
+        ]
+        
+        response = self.llm.predict_messages(messages)
+        return True, response.content
+
+    def create_feedback(self, user_id: int, select_date: datetime.date) -> Tuple[bool, str]:
+        """일일 피드백 생성"""
+        self._init_model()
+        
+        # CleanedData 조회
+        cleaned_data = CleanedData.query.filter_by(
+            user_id=user_id,
+            select_date=select_date
+        ).first()
+        
+        if not cleaned_data:
+            # 오늘 데이터 생성 시도
+            success, cleaned_text = self.clean_daily_data(user_id, select_date)
+            if not success:
+                # 어제 데이터 확인
+                yesterday = select_date - timedelta(days=1)
+                cleaned_data = CleanedData.query.filter_by(
+                    user_id=user_id,
+                    select_date=yesterday
+                ).first()
+                
+                if not cleaned_data:
+                    # 어제 데이터 생성 시도
+                    success, cleaned_text = self.clean_daily_data(user_id, yesterday)
+                    if not success:
+                        return False, "최소 하루의 데이터가 필요합니다."
+                else:
+                    cleaned_text = cleaned_data.cleaned_text
+                    
+                context = f"어제의 데이터를 기반으로 피드백을 생성합니다:\n{cleaned_text}"
+                use_date = yesterday
+            else:
+                context = f"오늘의 데이터를 기반으로 피드백을 생성합니다:\n{cleaned_text}"
+                use_date = select_date
         else:
-            response = chain.predict(
-                system_prompt=SYSTEM_PROMPT,
-                username=username,
-                question=question
-            )
+            cleaned_text = cleaned_data.cleaned_text
+            context = f"오늘의 데이터를 기반으로 피드백을 생성합니다:\n{cleaned_text}"
+            use_date = select_date
         
-        return response
-
-    def collect_user_data(self, user_id: int, select_date: date) -> tuple[str, dict]:
-        """사용자의 일기, 일정, 할일 데이터를 수집하고 하나의 텍스트로 통합하는 메서드"""
-        try:
-            # 해당 날짜의 데이터 수집
-            schedules = Schedule.query.filter(
-                Schedule.user_id == user_id,
-                Schedule.select_date == select_date
-            ).all()
-            
-            todos = Todo.query.filter(
-                Todo.user_id == user_id,
-                Todo.select_date == select_date
-            ).all()
-            
-            diary = Diary.query.filter(
-                Diary.user_id == user_id,
-                Diary.select_date == select_date
-            ).first()
-            
-            # 데이터 통합
-            data_parts = []
-            raw_data = {
-                "schedules": [],
-                "todos": [],
-                "diary": None
-            }
-            
-            if schedules:
-                schedule_text = "✨ 오늘의 일정:\n" + "\n".join([
-                    f"🌟 {s.time} - {s.title}" + (f" ({s.content})" if s.content else "")
-                    for s in schedules
-                ])
-                data_parts.append(schedule_text)
-                raw_data["schedules"] = [
-                    {"time": s.time, "title": s.title, "content": s.content}
-                    for s in schedules
-                ]
-            
-            if todos:
-                todo_text = "✨ 오늘의 할일:\n" + "\n".join([
-                    f"🎯 {t.content}" + (" (완료)" if t.is_completed else "")
-                    for t in todos
-                ])
-                data_parts.append(todo_text)
-                raw_data["todos"] = [
-                    {"content": t.content, "is_completed": t.is_completed}
-                    for t in todos
-                ]
-            
-            if diary:
-                diary_text = f"✨ 오늘의 일기:\n📝 {diary.content}"
-                data_parts.append(diary_text)
-                raw_data["diary"] = {"content": diary.content}
-            
-            combined_text = "\n\n".join(data_parts) if data_parts else "오늘은 기록된 데이터가 없어요 😊"
-            return combined_text, raw_data
-            
-        except Exception as e:
-            return f"앗! 데이터를 수집하는 중에 문제가 생겼어요 😢: {str(e)}", {}
-
-    def save_summary(self, user_id: int, summary_text: str, summary_type: str, select_date: date):
-        """생성된 요약을 데이터베이스에 저장하는 메서드"""
-        try:
-            # 요약 저장
-            summary = Summary(
-                user_id=user_id,
-                summary_text=summary_text,
-                type=summary_type,
-                select_date=select_date
-            )
-            db.session.add(summary)
-            
-            # 벡터 임베딩 생성 및 저장
-            embedding_vector = self.embeddings.embed_query(summary_text)
-            
-            embedding = Embedding(
-                user_id=user_id,
-                text=summary_text,
-                embedding=embedding_vector,
-                metadata={
-                    "type": summary_type,
-                    "date": select_date.isoformat()
-                }
-            )
-            db.session.add(embedding)
-            
-            db.session.commit()
-            
-        except Exception as e:
-            db.session.rollback()
-            raise Exception(f"앗! 요약을 저장하는 중에 문제가 생겼어요 😢: {str(e)}")
-
-    def get_similar_texts(self, query: str, user_id: int, limit: int = 5):
-        """유사한 텍스트를 검색하는 메서드"""
-        try:
-            # 쿼리 벡터 생성
-            query_vector = self.embeddings.embed_query(query)
-            
-            # PostgreSQL의 벡터 유사도 검색 쿼리
-            similar_embeddings = Embedding.query.filter(
-                Embedding.user_id == user_id
-            ).order_by(
-                Embedding.embedding.cosine_distance(query_vector)
-            ).limit(limit).all()
-            
-            return [(embed.text, embed.metadata) for embed in similar_embeddings]
-            
-        except Exception as e:
-            print(f"유사 텍스트 검색 중 오류 발생: {str(e)}")
-            return []
-
-    def summarize_data(self, user_id: int, select_date: date) -> str:
-        """하루의 데이터를 요약하는 메서드"""
-        try:
-            # 데이터 수집
-            combined_text, _ = self.collect_user_data(user_id, select_date)
-            
-            if "기록된 데이터가 없어요" in combined_text:
-                return "오늘은 특별한 활동이 없었네요! 내일은 어떤 즐거운 일들이 기다리고 있을까요? ✨"
-            
-            # 요약 프롬프트
-            prompt = PromptTemplate(
-                input_variables=["text"],
-                template=(
-                    "다음은 하루 동안의 활동 기록이에요:\n"
-                    "{text}\n\n"
-                    "이 내용을 귀엽고 따뜻한 톤으로 요약해주세요! 🌟\n"
-                    "중요한 일정이나 할일은 반드시 포함해주시고,\n"
-                    "일기의 감정이나 생각도 잘 반영해주세요! 💝"
-                )
-            )
-            
-            chain = ConversationChain(
-                llm=self.llm,
-                prompt=prompt,
-                memory=None  # 요약에는 대화 기록이 필요 없어요
-            )
-            
-            summary = chain.predict(text=combined_text)
-            return summary
-            
-        except Exception as e:
-            return f"앗! 요약하는 중에 문제가 생겼어요 😢: {str(e)}"
-
-    def generate_daily_feedback(self, user_id: int, select_date: date) -> str:
-        """하루 동안의 활동에 대한 피드백을 생성하는 메서드"""
-        try:
-            # 데이터 수집
-            combined_text, raw_data = self.collect_user_data(user_id, select_date)
-            
-            if "기록된 데이터가 없어요" in combined_text:
-                return "오늘은 조용한 하루였네요! 내일은 어떤 특별한 일들을 함께 기록해볼까요? ✨"
-            
-            # 피드백 프롬프트
-            prompt = PromptTemplate(
-                input_variables=["text"],
-                template=(
-                    "다음은 하루 동안의 활동 기록이에요:\n"
-                    "{text}\n\n"
-                    "이 내용을 바탕으로 다음과 같은 피드백을 제공해주세요:\n"
-                    "1. 오늘의 성과와 긍정적인 부분 칭찬하기 🌟\n"
-                    "2. 개선할 수 있는 부분 귀엽게 제안하기 💝\n"
-                    "3. 내일을 위한 따뜻한 응원 한마디 ✨\n\n"
-                    "귀엽고 친근한 톤으로 작성해주세요!"
-                )
-            )
-            
-            chain = ConversationChain(
-                llm=self.llm,
-                prompt=prompt,
-                memory=None  # 피드백에는 대화 기록이 필요 없어요
-            )
-            
-            feedback = chain.predict(text=combined_text)
-            
-            # 피드백 저장
-            response = AiResponse(
-                user_id=user_id,
-                content=feedback,
-                type="feedback",
-                select_date=select_date
-            )
-            db.session.add(response)
-            db.session.commit()
-            
-            return feedback
-            
-        except Exception as e:
-            return f"앗! 피드백을 생성하는 중에 문제가 생겼어요 😢: {str(e)}"
-
-    def recommend_schedule(self, user_id: int):
-        """사용자의 패턴을 분석하여 일정을 추천하는 메서드"""
-        username = self.get_user_name(user_id)
-        current_date = datetime.now().date()
-        context_data = self.get_context_data(user_id, current_date)
+        system_prompt = """
+        사용자의 하루 데이터를 분석하여 다음과 같은 피드백을 제공해주세요:
+        1. 할 일 완료율과 성취도 분석
+        2. 일정 관리의 효율성 평가
+        3. 긍정적인 부분 강조
+        4. 개선이 필요한 부분에 대한 건설적인 제안
+        5. 전반적인 하루 평가와 격려의 메시지
         
-        recommend_prompt = PromptTemplate(
-            input_variables=["system_prompt", "username", "context"],
-            template="{system_prompt}\n\n{username}님, 다음은 귀하의 과거 활동 기록입니다:\n{context}\n\n"
-            "내일의 일정과 할일을 추천해드리겠습니다. 다음 사항을 고려했습니다:\n"
-            "1. 과거의 생산적인 패턴 유지\n"
-            "2. 반복되는 일정 패턴\n"
-            "3. 미완료된 할일의 적절한 배치\n"
-            "4. 업무와 휴식의 균형\n"
-            "구체적인 시간대와 함께 추천해드리겠습니다."
+        피드백은 항상 긍정적이고 동기부여가 되는 톤을 유지하면서, 구체적이고 실천 가능한 제안을 포함해야 합니다.
+        """
+        
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=context)
+        ]
+        
+        response = self.llm.predict_messages(messages)
+        feedback_text = response.content
+        
+        # Feedback 모델에 저장
+        feedback = Feedback(
+            user_id=user_id,
+            feedback=feedback_text,
+            select_date=use_date
         )
+        db.session.add(feedback)
+        db.session.commit()
         
-        chain = ConversationChain(
-            llm=self.llm,
-            prompt=recommend_prompt,
-            memory=self.memory
-        )
+        return True, feedback_text
+
+    def create_recommendation(self, user_id: int) -> Tuple[bool, str]:
+        """일정 추천 생성"""
+        self._init_model()
         
-        recommendations = chain.predict(
-            system_prompt=SYSTEM_PROMPT,
-            username=username,
-            context=context_data
-        )
+        # 오늘 날짜로 CleanedData 조회
+        today = datetime.now().date()
+        cleaned_data = CleanedData.query.filter_by(
+            user_id=user_id,
+            select_date=today
+        ).first()
         
-        return recommendations
+        if not cleaned_data:
+            # 오늘 데이터 생성 시도
+            success, cleaned_text = self.clean_daily_data(user_id, today)
+            if not success:
+                # 어제 데이터 확인
+                yesterday = today - timedelta(days=1)
+                cleaned_data = CleanedData.query.filter_by(
+                    user_id=user_id,
+                    select_date=yesterday
+                ).first()
+                
+                if not cleaned_data:
+                    # 어제 데이터 생성 시도
+                    success, cleaned_text = self.clean_daily_data(user_id, yesterday)
+                    if not success:
+                        return False, "최소 하루의 데이터가 필요합니다."
+                else:
+                    cleaned_text = cleaned_data.cleaned_text
+                    
+                context = f"어제의 데이터를 기반으로 추천을 생성합니다:\n{cleaned_text}"
+            else:
+                context = f"오늘의 데이터를 기반으로 추천을 생성합니다:\n{cleaned_text}"
+        else:
+            cleaned_text = cleaned_data.cleaned_text
+            context = f"오늘의 데이터를 기반으로 추천을 생성합니다:\n{cleaned_text}"
+        
+        system_prompt = """
+        사용자의 하루 데이터를 분석하여 다음과 같은 추천을 제공해주세요:
+        1. 현재 일정과 할 일을 고려한 시간 관리 제안
+        2. 업무/학습 효율을 높일 수 있는 활동 추천
+        3. 스트레스 해소와 휴식을 위한 활동 제안
+        4. 사용자의 관심사와 목표를 고려한 새로운 활동 추천
+        5. 건강과 웰빙을 위한 제안
+        
+        추천은 구체적이고 실천 가능해야 하며, 사용자의 현재 상황과 일정을 고려하여 제시되어야 합니다.
+        """
+        
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=context)
+        ]
+        
+        response = self.llm.predict_messages(messages)
+        return True, response.content
+
+    def _preprocess_text(self, text: str) -> str:
+        """LLM을 사용한 텍스트 전처리"""
+        system_prompt = """
+        주어진 텍스트를 다음과 같이 전처리하세요:
+        1. 불필요한 특수문자나 중복된 공백 제거
+        2. 문장을 자연스럽게 연결
+        3. 중요한 정보는 유지하면서 간결하게 정리
+        4. 시간순으로 정리
+        """
+        
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=text)
+        ]
+        
+        response = self.llm.predict_messages(messages)
+        return response.content
