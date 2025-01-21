@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import List, Tuple
-from langchain.chat_models import ChatOpenAI
-from langchain.embeddings import OpenAIEmbeddings
+from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import OpenAIEmbeddings
 from langchain.schema import SystemMessage, HumanMessage
 from app.models import CleanedData, Summary, Embedding
 from app.extensions import db
@@ -131,6 +131,12 @@ class EmbeddingService:
     def _create_embedding(self, text: str) -> List[float]:
         """텍스트 임베딩 생성"""
         try:
+            if not self.embedding_model:
+                self._init_model()
+                
+            if not self.embedding_model:
+                raise ValueError("임베딩 모델 초기화 실패")
+                
             embedding = self.embedding_model.embed_query(text)
             return embedding
         except Exception as e:

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Dict, Tuple, List, Optional
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
 from app.models import Todo, Diary, Schedule, CleanedData, Feedback, Summary, Embedding
 from app.extensions import db
@@ -29,6 +29,7 @@ class LLMService:
     def _get_similar_summaries(self, user_id: int, query: str, limit: int = 3) -> List[str]:
         """유사한 주간 요약 검색"""
         self._init_embedding_service()
+        self.embedding_service._init_model()  # 임베딩 모델 초기화 추가
         
         try:
             # 쿼리 임베딩 생성
@@ -230,7 +231,7 @@ class LLMService:
         summaries = Summary.query.filter_by(
             user_id=user_id,
             type='weekly'
-        ).order_by(Summary.end_date.desc()).all()
+        ).order_by(Summary.end_date.desc()).limit(3).all()
         
         if summaries:
             contexts.append("주간 요약:")
@@ -276,6 +277,7 @@ class LLMService:
         
         피드백은 항상 긍정적이고 동기부여가 되는 톤을 유지하면서, 구체적이고 실천 가능한 제안을 포함해야 합니다.
         이전 주의 요약이 있다면 이를 참고하여 변화나 패턴을 파악하고 언급해주세요.
+        간단하게 2~3줄로 답변해줘.
         """
         
         # 메시지 구성: 시스템 프롬프트와 컨텍스트
@@ -309,7 +311,7 @@ class LLMService:
         summaries = Summary.query.filter_by(
             user_id=user_id,
             type='weekly'
-        ).order_by(Summary.end_date.desc()).all()
+        ).order_by(Summary.end_date.desc()).limit(3).all()
         
         if summaries:
             contexts.append("주간 요약:")
@@ -364,6 +366,7 @@ class LLMService:
         
         추천은 구체적이고 실천 가능해야 하며, 사용자의 현재 상황과 일정을 고려하여 제시되어야 합니다.
         이전 주의 요약이 있다면 이를 참고하여 사용자의 선호도와 패턴을 고려한 추천을 해주세요.
+        간단하게 2~3줄로 답변해줘.
         """
         
         # 메시지 구성: 시스템 프롬프트와 컨텍스트

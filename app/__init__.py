@@ -27,7 +27,7 @@ def create_app(config_class=Config):
     
     # 스케줄러 초기화
     with app.app_context():
-        from app.scheduler import init_scheduler, test_scheduler
+        from app.scheduler import init_scheduler
         
         # 스케줄러 초기화
         success, message = init_scheduler()
@@ -35,13 +35,6 @@ def create_app(config_class=Config):
             app.logger.error(f"Failed to initialize scheduler: {message}")
         else:
             app.logger.info(message)
-            
-            # 스케줄러 테스트 실행
-            test_success, test_message = test_scheduler()
-            if not test_success:
-                app.logger.error(f"Scheduler test failed: {test_message}")
-            else:
-                app.logger.info(test_message)
     
     return app
 
