@@ -26,7 +26,7 @@ def create_feedback():
     
     if not success:
         return jsonify({'success': False, 'message': response}), 400
-        
+    
     return jsonify({
         'success': True,
         'message': '피드백 생성 성공',
