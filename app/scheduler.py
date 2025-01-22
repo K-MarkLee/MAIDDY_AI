@@ -30,7 +30,7 @@ def process_yesterday_data():
             llm_service = LLMService()
             
             # 모든 사용자의 데이터 처리
-            users = User.query.all()1
+            users = User.query.all()
             if not users:
                 current_app.logger.warning("No users found in the system")
                 return
