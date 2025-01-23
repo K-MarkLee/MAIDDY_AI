@@ -180,7 +180,8 @@ class LLMService:
                 contodaydatatexts.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
 
             if daily_data.get('schedules'):
-                schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
+                schedule_texts = [f"- {schedule['title']}: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
+ {schedule['content']}" 
                                 for schedule in daily_data['schedules']]
                 todaydata.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
 
