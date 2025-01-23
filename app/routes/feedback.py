@@ -20,6 +20,7 @@ def create_feedback():
         select_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
         return jsonify({'success': False, 'message': '올바른 날짜 형식이 아닙니다. (YYYY-MM-DD)'}), 400
+
     
     llm_service = LLMService()
     success, response = llm_service.create_feedback(user_id, select_date)
