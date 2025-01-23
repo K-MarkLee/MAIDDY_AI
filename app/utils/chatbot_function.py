@@ -1,5 +1,5 @@
-from flask import jsonify, request
-from app import db, current_app
+from flask import jsonify, request, current_app
+from app import db
 from app.models import Schedule, Todo
 from typing import Tuple
 
