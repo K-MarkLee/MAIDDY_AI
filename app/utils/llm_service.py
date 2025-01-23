@@ -86,10 +86,10 @@ class LLMService:
             
             data = {
                 'todos': [{'content': todo.content, 'is_completed': todo.is_completed, 'select_date': todo.select_date} for todo in todos],
-                'diary': [{'content': diary.content, 'select_date': diary.select_date}],
+                'diary': {'content': diary.content, 'select_date': diary.select_date} if diary else None,
                 'schedules': [{'title': schedule.title, 'content': schedule.content, 'select_date': schedule.select_date} for schedule in schedules]
             }
-            
+                
             return True, data, "데이터 조회 성공"
         except Exception as e:
             current_app.logger.error(f"Error in get_daily_data: {str(e)}")
@@ -171,7 +171,7 @@ class LLMService:
         if success:
             # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
-                contexts.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
+                contexts.append(f"\n오늘의 데이터:\n{daily_data['diary']}")
 
             if daily_data.get('todos'):
                 todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
