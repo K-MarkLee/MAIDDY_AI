@@ -1,5 +1,4 @@
 from flask import jsonify, request
-from app.utils.llm_service import LLMService
 from yourapp import db, current_app
 from yourapp.models import Schedule, Todo
 from typing import Tuple
@@ -9,6 +8,7 @@ class ChatbotFunctions:
         pass
 
     def process_chat(self, user_id: int, question: str):
+        from app.utils.llm_service import LLMService
 
         llm_service = LLMService()
         date, time, content = None, None, question
@@ -50,7 +50,7 @@ class ChatbotFunctions:
             success, message = self.delete_schedule(user_id, int(schedule_id))
             return jsonify({'success': success, 'message': message})
         else:
-            success, response = self.llm_service.get_chat_response(user_id, question)
+            success, response = llm_service.get_chat_response(user_id, question)
             return jsonify({'success': success, 'response': response})
 
     def create_todo(self, user_id: int, content: str) -> Tuple[bool, str]:

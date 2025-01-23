@@ -1,5 +1,4 @@
 from flask import Blueprint, request, jsonify
-from app.utils.chatbot_function import ChatbotFunctions
 from app.utils.llm_service import LLMService
 from datetime import datetime
 from app.models import Schedule, Todo, Diary
@@ -32,12 +31,3 @@ def chatbot():
             'response': response
         }
     })
-
-@chatbot_bp.route('/chat', methods=['POST'])
-def chat():
-    data = request.get_json()
-    user_id = data['user_id']
-    question = data['question']
-
-    chatbot_functions = ChatbotFunctions()
-    return chatbot_functions.process_chat(user_id, question)
