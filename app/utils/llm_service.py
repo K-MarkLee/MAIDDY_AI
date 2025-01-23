@@ -71,7 +71,7 @@ class LLMService:
             # Diary 데이터 조회
             diary = Diary.query.filter_by(
                 user_id=user_id,
-                select_date=select_date
+                created_at=select_date
             ).first()
             
             # Schedule 데이터 조회
@@ -86,7 +86,7 @@ class LLMService:
             
             data = {
                 'todos': [{'content': todo.content, 'is_completed': todo.is_completed, 'select_date': todo.select_date} for todo in todos],
-                'diary': {'content': diary.content, 'select_date': diary.select_date} if diary else None,
+                'diary': [{'content': diary.content, 'select_date': diary.select_date}],
                 'schedules': [{'title': schedule.title, 'content': schedule.content, 'select_date': schedule.select_date} for schedule in schedules]
             }
                 
@@ -172,37 +172,21 @@ class LLMService:
         if success:
             # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
-                todaydata.append(f"\n오늘의 데이터:\n{daily_data['diary']}")
+                diary_texts = [f"{diary['select_date']}: {diary['content']}" for diary in daily_data['diary']]
+                todaydata.append(f"\n오늘의 데이터:\n" + "\n".join(diary_texts))
 
             if daily_data.get('todos'):
-                todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
+                todo_texts = [f" {todo['select_date']} : {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
                             for todo in daily_data['todos']]
-                contodaydatatexts.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
+                todaydata.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
 
             if daily_data.get('schedules'):
-                schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
+                schedule_texts = [f"{schedule['select_date']} : {schedule['title']} {schedule['content']}" 
                                 for schedule in daily_data['schedules']]
                 todaydata.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
 
-            # 유저 테스트용 더미 데이터 추가
-            contexts.append("""
-                - 지난 주의 일기: "지난 주에는 친구와 함께 여행을 갔습니다. 정말 즐거운 시간이었어요."
-                - 할 일 목록: 
-                - "주말에 쇼핑하기"
-                - "프로젝트 마감 준비하기"
-                - "월요일에 엄마랑 영화보기"
-                - "커피 줄여보기"
-                - "약 챙겨먹기"
-                - "월요일에 운동하기"
-                - "수요일에 운동하기"
-                - 일정 목록: 
-                - "월요일: 회의 참석"
-                - "수요일: 친구와 점심 약속"
-                - "목요일: 친구랑 여행"
-            """)
         else:
             contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
-
 
 
         
@@ -217,25 +201,16 @@ class LLMService:
                 if data.select_date != today:  # 오늘 데이터는임시 제외
                     contexts.append(f"{data.select_date.strftime('%Y-%m-%d')}의 데이터:\n{data.cleaned_text}")
 
-        
-
-        
-        # # 시스템 프롬프트 설정
-        # system_prompt = """
-        # 당신은 사용자의 일상을 관리해주는 AI 비서입니다.
-        # 사용자의 일기,할 일, 일정 데이터를 기반으로 자연스럽게 대화하며 도움을 제공해주세요.
-        # 항상 친절하고 공감적인 태도를 유지하면서, 실질적인 도움이 되는 답변을 제공해주세요.
-        # """
 
 
         system_prompt= f"""
         당신은 사용자의 일상을 관리해주는 AI 비서입니다. 현재는 유저 테스트 단계입니다.
         사용자의 일기,할 일, 일정 데이터를 기반으로 자연스럽게 대화하며 도움을 제공해주세요.
 
-        유저 테스트를 위해서 위의 데이터들을 자연스럽게 활용하고, 추가적으로 정보를 생각해 내어 대답해 주시오.
+        유저 테스트를 위해서 데이터들을 자연스럽게 활용하고, 추가적으로 정보를 생각해 내어 대답해 주세요.
         항상 친절하고 공감적인 태도를 유지하면서, 실질적인 도움이 되는 답변을 제공해주세요.
         
-        지난주의 데이터보다 오늘의 데이터{todaydata}를 좀더 신경써주세요.
+        오늘의 데이터 {todaydata}를 메인으로 사용하고 대답을 제공해주세요.
         """
 
         # 메시지 구성: 시스템 프롬프트, 컨텍스트, 사용자 질문
@@ -273,39 +248,23 @@ class LLMService:
         
         # 2. 일일 데이터 조회
         today = datetime.now().date()
-
         success, daily_data, message = self.get_daily_data(user_id, today)
         if success:
             # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
-                todaydata.append(f"\n오늘의 데이터:\n{daily_data['diary']}")
+                diary_texts = [f"{diary['select_date']}: {diary['content']}" for diary in daily_data['diary']]
+                todaydata.append(f"\n오늘의 데이터:\n" + "\n".join(diary_texts))
 
             if daily_data.get('todos'):
-                todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
+                todo_texts = [f" {todo['select_date']} : {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
                             for todo in daily_data['todos']]
                 todaydata.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
 
             if daily_data.get('schedules'):
-                schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
+                schedule_texts = [f"{schedule['select_date']} : {schedule['title']} {schedule['content']}" 
                                 for schedule in daily_data['schedules']]
                 todaydata.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
 
-            # 유저 테스트용 더미 데이터 추가
-            contexts.append("""
-                - 지난 주의 일기: "지난 주에는 친구와 함께 여행을 갔습니다. 정말 즐거운 시간이었어요."
-                - 지난주의할 일 목록: 
-                - "주말에 쇼핑하기"
-                - "프로젝트 마감 준비하기"
-                - "월요일에 엄마랑 영화보기"
-                - "매일 커피 줄여보기"
-                - "매일 약 챙겨먹기"
-                - "월요일에 운동하기"
-                - "수요일에 운동하기"
-                - 지난주의 일정 목록: 
-                - "월요일: 회의 참석"
-                - "수요일: 친구와 점심 약속"
-                - "목요일: 친구랑 여행"
-            """)
         else:
             contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
 
@@ -322,38 +281,24 @@ class LLMService:
                 if data.select_date != today:  # 오늘 데이터는임시 제외
                     contexts.append(f"{data.select_date.strftime('%Y-%m-%d')}의 데이터:\n{data.cleaned_text}")
         
-        # 시스템 프롬프트 설정
-        # system_prompt = """
-        # 사용자의 하루 데이터를 분석하여 다음과 같은 피드백을 제공해주세요:
-        # 1. 할 일 완료율과 성취도 분석
-        # 2. 일정 관리의 효율성 평가
-        # 3. 긍정적인 부분 강조
-        # 4. 개선이 필요한 부분에 대한 건설적인 제안
-        # 5. 전반적인 하루 평가와 격려의 메시지
-        
-        # 피드백은 항상 긍정적이고 동기부여가 되는 톤을 유지하면서, 구체적이고 실천 가능한 제안을 포함해야 합니다.
-        # 이전 주의 요약이 있다면 이를 참고하여 변화나 패턴을 파악하고 언급해주세요.
-        # 간단하게 2~3개로 답변해줘.
-        # """
 
         # 유저 테스트용
         system_prompt = f"""
             사용자의 하루 데이터를 분석하여 다음과 같은 피드백을 제공해주세요:
             1. 할 일 완료율과 성취도 분석
-            2. 일정 관리의 효율성 평가
-            3. 긍정적인 부분 강조
-            4. 개선이 필요한 부분에 대한 건설적인 제안
-            5. 전반적인 하루 평가와 격려의 메시지
+            2. 긍정적인 부분 강조
+            3. 개선이 필요한 부분에 대한 건설적인 제안
+            4. 전반적인 하루 평가와 격려의 메시지
 
             피드백은 항상 긍정적이고 동기부여가 되는 톤을 유지하면서, 구체적이고 실천 가능한 제안을 포함해야 합니다.
 
             현재는 유저테스트 단계입니다.
 
-            피드백은 오늘하루가 어땟는지 오늘의 일기, 오늘의 일정, 오늘의 할일 인 {todaydata}의 평가만을 해야합니다. 
-            주어진 데이터를 반환하지말고, 오늘의 데이터레 대한 평가만을 적어줘.
-            이모티콘등은 최대한 없게하고, 깔끔하게 답변해줘.
-
+            피드백은 오늘하루가 어땟는지 오늘의 데이터의 평가만을 해야합니다. 
+            데이터를 반환하지말고, 오늘의 데이터에 대한 평가만을 적어줘.
             
+
+            오늘의 데이터야. {todaydata}
             간단하게 1~2줄로 답변해주세요.
             """
         
@@ -403,39 +348,23 @@ class LLMService:
 
         # 2. 일일 데이터 조회
         today = datetime.now().date()
-
         success, daily_data, message = self.get_daily_data(user_id, today)
         if success:
             # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
-                todaydata.append(f"\n오늘의 데이터:\n{daily_data['diary']}")
+                diary_texts = [f"{diary['select_date']}: {diary['content']}" for diary in daily_data['diary']]
+                todaydata.append(f"\n오늘의 데이터:\n" + "\n".join(diary_texts))
 
             if daily_data.get('todos'):
-                todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
+                todo_texts = [f" {todo['select_date']} : {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
                             for todo in daily_data['todos']]
-                todaydata.append("할 일 목록:\n" + "\n".join(todo_texts))
+                todaydata.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
 
             if daily_data.get('schedules'):
-                schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
+                schedule_texts = [f"{schedule['select_date']} : {schedule['title']} {schedule['content']}" 
                                 for schedule in daily_data['schedules']]
-                todaydata.append("일정 목록:\n" + "\n".join(schedule_texts))
+                todaydata.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
 
-            # 유저 테스트용 더미 데이터 추가
-            contexts.append("""
-                - 지난 주의 일기: "지난 주에는 친구와 함께 여행을 갔습니다. 정말 즐거운 시간이었어요."
-                - 지난 주의할 일 목록: 
-                - "주말에 쇼핑하기"
-                - "프로젝트 마감 준비하기"
-                - "월요일에 엄마랑 영화보기"
-                - "매일 커피 줄여보기"
-                - "매일 약 챙겨먹기"
-                - "월요일에 운동하기"
-                - "수요일에 운동하기"
-                - 지난 주의 일정 목록: 
-                - "월요일: 회의 참석"
-                - "수요일: 친구와 점심 약속"
-                - "목요일: 친구랑 여행"
-            """)
         else:
             contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
 
@@ -451,20 +380,7 @@ class LLMService:
                 if data.select_date != today:  # 오늘 데이터는임시 제외
                     contexts.append(f"{data.select_date.strftime('%Y-%m-%d')}의 데이터:\n{data.cleaned_text}")
         
-        # 시스템 프롬프트 설정
-        # system_prompt = """
-        # 사용자의 하루 데이터를 분석하여 다음과 같은 추천을 제공해주세요:
-        # 1. 현재 일정과 할 일을 고려한 시간 관리 제안
-        # 2. 업무/학습 효율을 높일 수 있는 활동 추천
-        # 3. 스트레스 해소와 휴식을 위한 활동 제안
-        # 4. 사용자의 관심사와 목표를 고려한 새로운 활동 추천
-        # 5. 건강과 웰빙을 위한 제안
-        
-        # 추천은 구체적이고 실천 가능해야 하며, 사용자의 현재 상황과 일정을 고려하여 제시되어야 합니다.
-        # 이전 주의 요약이 있는데, 이를 참고하여 사용자의 선호도와 패턴을 고려한 추천을 해주세요.
-        # 간닫하게 2~3줄로 답변해줘.
-        # """
-        
+
         # 유저 테스트용
         system_prompt = f"""
             사용자의 하루 데이터를 분석하여 다음과 같은 추천을 제공해주세요:
@@ -472,15 +388,14 @@ class LLMService:
             2. 업무/학습 효율을 높일 수 있는 활동 추천
             3. 스트레스 해소와 휴식을 위한 활동 제안
             4. 사용자의 관심사와 목표를 고려한 새로운 활동 추천
-            5. 건강과 웰빙을 위한 제안
 
             현재는 유저테스트 단계입니다.
 
-            답변의 예시야.
-            1. 지난번에는 꾸준히 운동하셧는데 최근데는 쉬셧군요! 내일은 운동해보는게 어떨가요?
-            2. 과제가 많이 바쁘시군요! 아침에 커피한잔 어떠실가요?
-            이런 느낌으로 2~3개만 추천해줘. 이모티콘은 없애고 오늘 일정같은거 보여주지말고 딱 추천만.
-            오늘의 일기, 오늘의 할일, 오늘의 일정 인 {todaydata}을 메인으로, 지난주는 참고만 하는걸로 해주세요.
+            깔끔하게 정리답변해줘야해.
+            오늘 일정같은거 보여주지말고 딱 추천만.
+            
+            오늘의 데이터야. {todaydata}
+            간단하게 1~2줄로 답변해줘.
 
         """
         
