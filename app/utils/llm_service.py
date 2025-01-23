@@ -6,6 +6,7 @@ from app.models import Todo, Diary, Schedule, CleanedData, Feedback, Summary, Em
 from app.extensions import db
 from flask import current_app
 from app.utils.embedding import EmbeddingService
+from app.utils.chatbot_functions import ChatbotFunctions  # ChatbotFunctions 임포트 추가
 
 class LLMService:
     def __init__(self):
@@ -154,17 +155,25 @@ class LLMService:
     def get_chat_response(self, user_id: int, question: str) -> Tuple[bool, str]:
         """챗봇 응답 생성"""
         self._init_model()
-        
-        # 컨텍스트 수집
+
+        # 사용자 요청 처리
+        chatbot_functions = ChatbotFunctions()  # ChatbotFunctions 인스턴스 생성
+
+        if "일정 추가" in question or "일정 수정" in question or "일정 삭제" in question:
+            return chatbot_functions.process_chat(user_id, question), ""
+        elif "할일 추가" in question or "할일 수정" in question or "할일 삭제" in question:
+            return chatbot_functions.process_chat(user_id, question), ""
+
+        # 기존의 LLM 응답 생성 로직
         contexts = []
         todaydata = []
-        
+
         # 1. Vector 검색으로 유사한 주간 요약 찾기
         similar_summaries = self._get_similar_summaries(user_id, question)
         if similar_summaries:
             contexts.append("관련된 과거 주간 요약:")
             contexts.extend(similar_summaries)
-        
+
 
         # 2. 일일 데이터 조회
         today = datetime.now().date()
@@ -194,14 +203,12 @@ class LLMService:
         all_data = CleanedData.query.filter_by(
             user_id=user_id
         ).order_by(CleanedData.select_date.desc()).all()
-        
+
         if all_data:
             contexts.append("\n과거 데이터:")
             for data in all_data:
                 if data.select_date != today:  # 오늘 데이터는임시 제외
-                    contexts.append(f"{data.select_date.strftime('%Y-%m-%d')}의 데이터:\n{data.cleaned_text}")
-
-
+                    contexts.append(data.cleaned_text)
 
         system_prompt= f"""
         당신은 사용자의 일상을 관리해주는 AI 비서입니다. 현재는 유저 테스트 단계입니다.
