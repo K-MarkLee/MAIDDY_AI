@@ -1,6 +1,6 @@
 from flask import jsonify, request
-from yourapp import db, current_app
-from yourapp.models import Schedule, Todo
+from app import db, current_app
+from app.models import Schedule, Todo
 from typing import Tuple
 
 class ChatbotFunctions:
