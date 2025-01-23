@@ -71,7 +71,7 @@ class LLMService:
             # Diary 데이터 조회
             diary = Diary.query.filter_by(
                 user_id=user_id,
-                created_at=select_date
+                select_date=select_date
             ).first()
             
             # Schedule 데이터 조회
