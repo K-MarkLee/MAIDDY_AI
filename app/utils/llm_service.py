@@ -6,7 +6,7 @@ from app.models import Todo, Diary, Schedule, CleanedData, Feedback, Summary, Em
 from app.extensions import db
 from flask import current_app
 from app.utils.embedding import EmbeddingService
-from app.utils.chatbot_functions import ChatbotFunctions  # ChatbotFunctions 임포트 추가
+from app.utils.chatbot_function import ChatbotFunctions  # 수정된 임포트 경로  # ChatbotFunctions 임포트 추가
 
 class LLMService:
     def __init__(self):
