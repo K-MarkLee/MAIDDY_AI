@@ -157,6 +157,7 @@ class LLMService:
         
         # 컨텍스트 수집
         contexts = []
+        todaydata = []
         
         # 1. Vector 검색으로 유사한 주간 요약 찾기
         similar_summaries = self._get_similar_summaries(user_id, question)
@@ -171,17 +172,17 @@ class LLMService:
         if success:
             # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
-                contexts.append(f"\n오늘의 데이터:\n{daily_data['diary']}")
+                todaydata.append(f"\n오늘의 데이터:\n{daily_data['diary']}")
 
             if daily_data.get('todos'):
                 todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
                             for todo in daily_data['todos']]
-                contexts.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
+                contodaydatatexts.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
 
             if daily_data.get('schedules'):
                 schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
                                 for schedule in daily_data['schedules']]
-                contexts.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
+                todaydata.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
 
             # 유저 테스트용 더미 데이터 추가
             contexts.append("""
@@ -267,6 +268,7 @@ class LLMService:
         
         # 컨텍스트 수집
         contexts = []
+        todaydata = []
         
         # 1. 모든 주간 요약 가져오기
         summaries = Summary.query.filter_by(
@@ -286,17 +288,17 @@ class LLMService:
         if success:
             # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
-                contexts.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
+                todaydata.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
 
             if daily_data.get('todos'):
                 todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
                             for todo in daily_data['todos']]
-                contexts.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
+                todaydata.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
 
             if daily_data.get('schedules'):
                 schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
                                 for schedule in daily_data['schedules']]
-                contexts.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
+                todaydata.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
 
             # 유저 테스트용 더미 데이터 추가
             contexts.append("""
@@ -345,7 +347,7 @@ class LLMService:
         # """
 
         # 유저 테스트용
-        system_prompt = """
+        system_prompt = f"""
             사용자의 하루 데이터를 분석하여 다음과 같은 피드백을 제공해주세요:
             1. 할 일 완료율과 성취도 분석
             2. 일정 관리의 효율성 평가
@@ -366,7 +368,7 @@ class LLMService:
             - "수요일: 친구와 점심 약속"
 
             와 같이 가상의 데이터가 있다고 생각하고 대답해주세요. (참고용)
-            피드백은 오늘하루가 어땟는지 오늘의 일기, 오늘의 일정, 오늘의 할일 평가만을 해야합니다. 
+            피드백은 오늘하루가 어땟는지 오늘의 일기, 오늘의 일정, 오늘의 할일 인 {todaydata}의 평가만을 해야합니다. 
             일기를 어떻게 써야한다 이런게 아니라 오늘하루를 보고 분석해서 알려줍니다.
 
             간단하게 1~2줄로 답변해주세요.
@@ -402,6 +404,7 @@ class LLMService:
         
         # 컨텍스트 수집
         contexts = []
+        todaydata = []
         
         # 1. 모든 주간 요약 가져오기
         summaries = Summary.query.filter_by(
@@ -422,22 +425,22 @@ class LLMService:
         if success:
             # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
-                contexts.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
+                todaydata.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
 
             if daily_data.get('todos'):
                 todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
                             for todo in daily_data['todos']]
-                contexts.append("할 일 목록:\n" + "\n".join(todo_texts))
+                todaydata.append("할 일 목록:\n" + "\n".join(todo_texts))
 
             if daily_data.get('schedules'):
                 schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
                                 for schedule in daily_data['schedules']]
-                contexts.append("일정 목록:\n" + "\n".join(schedule_texts))
+                todaydata.append("일정 목록:\n" + "\n".join(schedule_texts))
 
             # 유저 테스트용 더미 데이터 추가
             contexts.append("""
                 - 지난 주의 일기: "지난 주에는 친구와 함께 여행을 갔습니다. 정말 즐거운 시간이었어요."
-                - 지난 주의 할 일 목록: 
+                - 지난 주의할 일 목록: 
                 - "주말에 쇼핑하기"
                 - "프로젝트 마감 준비하기"
                 - "월요일에 엄마랑 영화보기"
@@ -480,7 +483,7 @@ class LLMService:
         # """
         
         # 유저 테스트용
-        system_prompt = """
+        system_prompt = f"""
             사용자의 하루 데이터를 분석하여 다음과 같은 추천을 제공해주세요:
             1. 현재 일정과 할 일을 고려한 시간 관리 제안
             2. 업무/학습 효율을 높일 수 있는 활동 추천
@@ -506,7 +509,7 @@ class LLMService:
             2. 과제가 많이 바쁘시군요! 아침에 커피한잔 어떠실가요?
 
             와 같이 추천해주세요.
-            오늘의 일기, 오늘의 할일, 오늘의 일정을 메인으로, 지난주는 참고만 하는걸로 해주세요.
+            오늘의 일기, 오늘의 할일, 오늘의 일정 인 {todaydata}을 메인으로, 지난주는 참고만 하는걸로 해주세요.
             2~3개 정도로 추천 해주세요.
 
         """

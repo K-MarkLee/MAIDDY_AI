@@ -50,6 +50,7 @@ class Schedule(db.Model):
     select_date = db.Column(db.Date, nullable=False)
     time = db.Column(db.Time, nullable=False)  # HH:MM:SS 형식으로 저장
     pinned = db.Column(db.Boolean, nullable=False, default=False)  # 고정된 일정 여부
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class Todo(db.Model):
