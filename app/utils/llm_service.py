@@ -167,27 +167,22 @@ class LLMService:
 
         # 2. 일일 데이터 조회
         today = datetime.now().date()
-        if not is_test_mode:
-            success, daily_data, message = self.get_daily_data(user_id, today)
-            if success:
-                # 일일 데이터를 컨텍스트에 추가
-                if daily_data.get('diary'):
-                    contexts.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
+        success, daily_data, message = self.get_daily_data(user_id, today)
+        if success:
+            # 일일 데이터를 컨텍스트에 추가
+            if daily_data.get('diary'):
+                contexts.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
 
-                if daily_data.get('todos'):
-                    todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
-                                for todo in daily_data['todos']]
-                    contexts.append("할 일 목록:\n" + "\n".join(todo_texts))
+            if daily_data.get('todos'):
+                todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
+                            for todo in daily_data['todos']]
+                contexts.append("할 일 목록:\n" + "\n".join(todo_texts))
 
-                if daily_data.get('schedules'):
-                    schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
-                                    for schedule in daily_data['schedules']]
-                    contexts.append("일정 목록:\n" + "\n".join(schedule_texts))
-            else:
-                # 로그에 에러 메시지 기록
-                current_app.logger.warning(f"get_daily_data 실패: {message}")
-                contexts.append(f"일일 데이터 조회 중 문제 발생: {message}")
-        else:
+            if daily_data.get('schedules'):
+                schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
+                                for schedule in daily_data['schedules']]
+                contexts.append("일정 목록:\n" + "\n".join(schedule_texts))
+
             # 유저 테스트용 더미 데이터 추가
             contexts.append(
                 """
@@ -200,6 +195,10 @@ class LLMService:
                 - "월요일: 회의 참석"
                 - "수요일: 친구와 점심 약속"
                 """)
+        else:
+            contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
+
+
 
         
         # 3. 모든 일일 데이터 가져오기
@@ -268,27 +267,23 @@ class LLMService:
         
         # 2. 일일 데이터 조회
         today = datetime.now().date()
-        if not is_test_mode:
-            success, daily_data, message = self.get_daily_data(user_id, today)
-            if success:
-                # 일일 데이터를 컨텍스트에 추가
-                if daily_data.get('diary'):
-                    contexts.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
 
-                if daily_data.get('todos'):
-                    todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
-                                for todo in daily_data['todos']]
-                    contexts.append("할 일 목록:\n" + "\n".join(todo_texts))
+        success, daily_data, message = self.get_daily_data(user_id, today)
+        if success:
+            # 일일 데이터를 컨텍스트에 추가
+            if daily_data.get('diary'):
+                contexts.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
 
-                if daily_data.get('schedules'):
-                    schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
-                                    for schedule in daily_data['schedules']]
-                    contexts.append("일정 목록:\n" + "\n".join(schedule_texts))
-            else:
-                # 로그에 에러 메시지 기록
-                current_app.logger.warning(f"get_daily_data 실패: {message}")
-                contexts.append(f"일일 데이터 조회 중 문제 발생: {message}")
-        else:
+            if daily_data.get('todos'):
+                todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
+                            for todo in daily_data['todos']]
+                contexts.append("할 일 목록:\n" + "\n".join(todo_texts))
+
+            if daily_data.get('schedules'):
+                schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
+                                for schedule in daily_data['schedules']]
+                contexts.append("일정 목록:\n" + "\n".join(schedule_texts))
+
             # 유저 테스트용 더미 데이터 추가
             contexts.append("""
             - 지난 주의 일기: "지난 주에는 친구와 함께 여행을 갔습니다. 정말 즐거운 시간이었어요."
@@ -299,6 +294,10 @@ class LLMService:
             - "월요일: 회의 참석"
             - "수요일: 친구와 점심 약속"
             """)
+        else:
+            contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
+
+
         
         # 3. 모든 일일 데이터 가져오기
         all_data = CleanedData.query.filter_by(
@@ -397,27 +396,23 @@ class LLMService:
 
         # 2. 일일 데이터 조회
         today = datetime.now().date()
-        if not is_test_mode:
-            success, daily_data, message = self.get_daily_data(user_id, today)
-            if success:
-                # 일일 데이터를 컨텍스트에 추가
-                if daily_data.get('diary'):
-                    contexts.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
 
-                if daily_data.get('todos'):
-                    todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
-                                for todo in daily_data['todos']]
-                    contexts.append("할 일 목록:\n" + "\n".join(todo_texts))
+        success, daily_data, message = self.get_daily_data(user_id, today)
+        if success:
+            # 일일 데이터를 컨텍스트에 추가
+            if daily_data.get('diary'):
+                contexts.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
 
-                if daily_data.get('schedules'):
-                    schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
-                                    for schedule in daily_data['schedules']]
-                    contexts.append("일정 목록:\n" + "\n".join(schedule_texts))
-            else:
-                # 로그에 에러 메시지 기록
-                current_app.logger.warning(f"get_daily_data 실패: {message}")
-                contexts.append(f"일일 데이터 조회 중 문제 발생: {message}")
-        else:
+            if daily_data.get('todos'):
+                todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
+                            for todo in daily_data['todos']]
+                contexts.append("할 일 목록:\n" + "\n".join(todo_texts))
+
+            if daily_data.get('schedules'):
+                schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
+                                for schedule in daily_data['schedules']]
+                contexts.append("일정 목록:\n" + "\n".join(schedule_texts))
+
             # 유저 테스트용 더미 데이터 추가
             contexts.append("""
                 - 지난 주의 일기: "지난 주에는 친구와 함께 여행을 갔습니다. 정말 즐거운 시간이었어요."
@@ -428,6 +423,9 @@ class LLMService:
                 - "월요일: 회의 참석"
                 - "수요일: 친구와 점심 약속"
             """)
+        else:
+            contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
+
         
         # 3. 모든 일일 데이터 가져오기
         all_data = CleanedData.query.filter_by(
