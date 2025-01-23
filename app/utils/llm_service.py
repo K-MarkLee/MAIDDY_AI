@@ -6,7 +6,6 @@ from app.models import Todo, Diary, Schedule, CleanedData, Feedback, Summary, Em
 from app.extensions import db
 from flask import current_app
 from app.utils.embedding import EmbeddingService
-from app.utils.chatbot_function import ChatbotFunctions  # 수정된 임포트 경로  # ChatbotFunctions 임포트 추가
 
 class LLMService:
     def __init__(self):
@@ -154,15 +153,7 @@ class LLMService:
 
     def get_chat_response(self, user_id: int, question: str) -> Tuple[bool, str]:
         """챗봇 응답 생성"""
-        self._init_model()
-
-        # 사용자 요청 처리
-        chatbot_functions = ChatbotFunctions()  # ChatbotFunctions 인스턴스 생성
-
-        if "일정 추가" in question or "일정 수정" in question or "일정 삭제" in question:
-            return chatbot_functions.process_chat(user_id, question), ""
-        elif "할일 추가" in question or "할일 수정" in question or "할일 삭제" in question:
-            return chatbot_functions.process_chat(user_id, question), ""
+        self._init_model()  
 
         # 기존의 LLM 응답 생성 로직
         contexts = []
