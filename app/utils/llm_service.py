@@ -288,7 +288,7 @@ class LLMService:
         if success:
             # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
-                todaydata.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
+                todaydata.append(f"\n오늘의 데이터:\n{daily_data['diary']}")
 
             if daily_data.get('todos'):
                 todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
@@ -425,7 +425,7 @@ class LLMService:
         if success:
             # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
-                todaydata.append(f"\n오늘의 데이터:\n{daily_data['diary']['diary']}")
+                todaydata.append(f"\n오늘의 데이터:\n{daily_data['diary']}")
 
             if daily_data.get('todos'):
                 todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
