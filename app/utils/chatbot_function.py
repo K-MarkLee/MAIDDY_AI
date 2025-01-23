@@ -6,9 +6,11 @@ from typing import Tuple
 
 class ChatbotFunctions:
     def __init__(self):
-        self.llm_service = LLMService()
+        pass
 
     def process_chat(self, user_id: int, question: str):
+
+        llm_service = LLMService()
         date, time, content = None, None, question
 
         # 날짜와 시간 패턴 찾기
