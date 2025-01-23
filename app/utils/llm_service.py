@@ -176,12 +176,12 @@ class LLMService:
             if daily_data.get('todos'):
                 todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
                             for todo in daily_data['todos']]
-                contexts.append("할 일 목록:\n" + "\n".join(todo_texts))
+                contexts.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
 
             if daily_data.get('schedules'):
                 schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
                                 for schedule in daily_data['schedules']]
-                contexts.append("일정 목록:\n" + "\n".join(schedule_texts))
+                contexts.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
 
             # 유저 테스트용 더미 데이터 추가
             contexts.append("""
@@ -244,6 +244,7 @@ class LLMService:
 
         유저 테스트를 위해서 위의 데이터들을 자연스럽게 활용하고, 추가적으로 정보를 생각해 내어 대답해 주시오.
         항상 친절하고 공감적인 태도를 유지하면서, 실질적인 도움이 되는 답변을 제공해주세요.
+        지난주의 데이터보다 오늘의 데이터를 좀더 신경써주세요.
         """
 
         # 메시지 구성: 시스템 프롬프트, 컨텍스트, 사용자 질문
@@ -290,17 +291,17 @@ class LLMService:
             if daily_data.get('todos'):
                 todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
                             for todo in daily_data['todos']]
-                contexts.append("할 일 목록:\n" + "\n".join(todo_texts))
+                contexts.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
 
             if daily_data.get('schedules'):
                 schedule_texts = [f"- {schedule['title']}: {schedule['content']}" 
                                 for schedule in daily_data['schedules']]
-                contexts.append("일정 목록:\n" + "\n".join(schedule_texts))
+                contexts.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
 
             # 유저 테스트용 더미 데이터 추가
             contexts.append("""
                 - 지난 주의 일기: "지난 주에는 친구와 함께 여행을 갔습니다. 정말 즐거운 시간이었어요."
-                - 할 일 목록: 
+                - 지난주의할 일 목록: 
                 - "주말에 쇼핑하기"
                 - "프로젝트 마감 준비하기"
                 - "월요일에 엄마랑 영화보기"
@@ -308,7 +309,7 @@ class LLMService:
                 - "매일 약 챙겨먹기"
                 - "월요일에 운동하기"
                 - "수요일에 운동하기"
-                - 일정 목록: 
+                - 지난주의 일정 목록: 
                 - "월요일: 회의 참석"
                 - "수요일: 친구와 점심 약속"
                 - "목요일: 친구랑 여행"
@@ -357,15 +358,15 @@ class LLMService:
             현재는 유저테스트 단계입니다.
 
             - 지난 주의 일기: "지난 주에는 친구와 함께 여행을 갔습니다. 정말 즐거운 시간이었어요."
-            - 할 일 목록: 
+            - 지난주의 할 일 목록: 
             - "주말에 쇼핑하기"
             - "프로젝트 마감 준비하기"
-            - 일정 목록: 
+            - 지난주의 일정 목록: 
             - "월요일: 회의 참석"
             - "수요일: 친구와 점심 약속"
 
-            와 같이 가상의 데이터가 있다고 생각하고 대답해주세요.
-            피드백은 오늘하루가 어땟는지 평가만을 해야합니다. 
+            와 같이 가상의 데이터가 있다고 생각하고 대답해주세요. (참고용)
+            피드백은 오늘하루가 어땟는지 오늘의 일기, 오늘의 일정, 오늘의 할일 평가만을 해야합니다. 
             일기를 어떻게 써야한다 이런게 아니라 오늘하루를 보고 분석해서 알려줍니다.
 
             간단하게 1~2줄로 답변해주세요.
@@ -436,7 +437,7 @@ class LLMService:
             # 유저 테스트용 더미 데이터 추가
             contexts.append("""
                 - 지난 주의 일기: "지난 주에는 친구와 함께 여행을 갔습니다. 정말 즐거운 시간이었어요."
-                - 할 일 목록: 
+                - 지난 주의 할 일 목록: 
                 - "주말에 쇼핑하기"
                 - "프로젝트 마감 준비하기"
                 - "월요일에 엄마랑 영화보기"
@@ -444,7 +445,7 @@ class LLMService:
                 - "매일 약 챙겨먹기"
                 - "월요일에 운동하기"
                 - "수요일에 운동하기"
-                - 일정 목록: 
+                - 지난 주의 일정 목록: 
                 - "월요일: 회의 참석"
                 - "수요일: 친구와 점심 약속"
                 - "목요일: 친구랑 여행"
@@ -490,10 +491,10 @@ class LLMService:
             현재는 유저테스트 단계입니다.
 
             - 지난 주의 일기: "지난 주에는 친구와 함께 여행을 갔습니다. 정말 즐거운 시간이었어요."
-            -할 일 목록: 
+            -지난 주의 할 일 목록: 
             - "주말에 쇼핑하기"
             - "프로젝트 마감 준비하기"
-            - 일정 목록: 
+            - 지난 주의 일정 목록: 
             - "월요일: 회의 참석"
             - "수요일: 친구와 점심 약속"
             와 같은 가상의 데이터가 있다고 생각하고 추천해주세요.
@@ -504,8 +505,9 @@ class LLMService:
             1. 지난번에는 꾸준히 운동하셧는데 최근데는 쉬셧군요! 내일은 운동해보는게 어떨가요?
             2. 과제가 많이 바쁘시군요! 아침에 커피한잔 어떠실가요?
 
-            와 같이.
-            2~3개 정도로 추천 해줘.
+            와 같이 추천해주세요.
+            오늘의 일기, 오늘의 할일, 오늘의 일정을 메인으로, 지난주는 참고만 하는걸로 해주세요.
+            2~3개 정도로 추천 해주세요.
 
         """
         
