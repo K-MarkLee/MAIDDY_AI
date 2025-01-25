@@ -155,6 +155,25 @@ class LLMService:
         """챗봇 응답 생성"""
         self._init_model()  
 
+        # 사용자 의도 분석
+        intent_type, action, content = self._analyze_user_intent(question)
+        
+        # 원래 의도 저장
+        original_type = "todo" if "시에" in question and "할일" in question else None
+        
+        # 일정이나 할일 관리 요청인 경우
+        if intent_type in ["schedule", "todo"] and action in ["add", "update", "delete"]:
+            if intent_type == "schedule":
+                success, message = self._manage_schedule(user_id, action, content)
+                # 원래 할일로 요청했지만 시간이 있어서 일정으로 변환된 경우
+                if original_type == "todo":
+                    message = f"시간이 포함되어 있어서 할일이 아닌 일정으로 추가했습니다. {message}"
+            else:  # todo
+                success, message = self._manage_todo(user_id, action, content)
+                
+            if not success:
+                return False, message
+
         # 기존의 LLM 응답 생성 로직
         contexts = []
         todaydata = []
@@ -164,7 +183,6 @@ class LLMService:
         if similar_summaries:
             contexts.append("관련된 과거 주간 요약:")
             contexts.extend(similar_summaries)
-
 
         # 2. 일일 데이터 조회
         today = datetime.now().date()
@@ -184,12 +202,9 @@ class LLMService:
                 schedule_texts = [f"{schedule['select_date']} : {schedule['title']} {schedule['content']}" 
                                 for schedule in daily_data['schedules']]
                 todaydata.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
-
         else:
             contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
 
-
-        
         # 3. 모든 일일 데이터 가져오기
         all_data = CleanedData.query.filter_by(
             user_id=user_id
@@ -201,17 +216,29 @@ class LLMService:
                 if data.select_date != today:  # 오늘 데이터는임시 제외
                     contexts.append(data.cleaned_text)
 
-        system_prompt= f"""
-        당신은 사용자의 일상을 관리해주는 AI 비서입니다. 현재는 유저 테스트 단계입니다.
-        사용자의 일기,할 일, 일정 데이터를 기반으로 자연스럽게 대화하며 도움을 제공해주세요.
+        # 일정이나 할일이 변경된 경우 응답 메시지 수정
+        if intent_type in ["schedule", "todo"] and action in ["add", "update", "delete"]:
+            system_prompt = f"""
+            당신은 사용자의 일상을 관리해주는 AI 비서입니다.
+            방금 다음과 같은 작업을 수행했습니다: {message}
+            
+            사용자의 일기, 할 일, 일정 데이터를 기반으로 자연스럽게 대화하며 도움을 제공해주세요.
+            항상 친절하고 공감적인 태도를 유지하면서, 실질적인 도움이 되는 답변을 제공해주세요.
+            
+            오늘의 데이터: {todaydata}
+            """
+        else:
+            system_prompt = f"""
+            당신은 사용자의 일상을 관리해주는 AI 비서입니다. 현재는 유저 테스트 단계입니다.
+            사용자의 일기, 할 일, 일정 데이터를 기반으로 자연스럽게 대화하며 도움을 제공해주세요.
 
-        유저 테스트를 위해서 데이터들을 자연스럽게 활용하고, 추가적으로 정보를 생각해 내어 대답해 주세요.
-        항상 친절하고 공감적인 태도를 유지하면서, 실질적인 도움이 되는 답변을 제공해주세요.
-        
-        오늘의 데이터 {todaydata}를 메인으로 사용하고 대답을 제공해주세요.
-        """
+            유저 테스트를 위해서 데이터들을 자연스럽게 활용하고, 추가적으로 정보를 생각해 내어 대답해 주세요.
+            항상 친절하고 공감적인 태도를 유지하면서, 실질적인 도움이 되는 답변을 제공해주세요.
+            
+            오늘의 데이터: {todaydata}
+            """
 
-        # 메시지 구성: 시스템 프롬프트, 컨텍스트, 사용자 질문
+        # 메시지 구성
         messages = [
             SystemMessage(content=system_prompt),
             SystemMessage(content="\n".join(contexts)),
@@ -224,6 +251,221 @@ class LLMService:
         except Exception as e:
             current_app.logger.error(f"chat_model.invoke 중 오류 발생: {str(e)}")
             return False, "챗봇 응답 생성 중 오류가 발생했습니다."
+
+    def _parse_date(self, date_str: str) -> datetime.date:
+        """날짜 문자열을 파싱하는 메서드"""
+        try:
+            # 다양한 날짜 형식 처리
+            formats = [
+                "%Y-%m-%d",
+                "%Y년 %m월 %d일",
+                "%m월 %d일",
+                "오늘",
+                "내일",
+                "모레"
+            ]
+            
+            if date_str in ["오늘", "today"]:
+                return datetime.now().date()
+            elif date_str in ["내일", "tomorrow"]:
+                return (datetime.now() + timedelta(days=1)).date()
+            elif date_str in ["모레", "day after tomorrow"]:
+                return (datetime.now() + timedelta(days=2)).date()
+            
+            for fmt in formats:
+                try:
+                    if "년" not in date_str and fmt == "%Y년 %m월 %d일":
+                        continue
+                    parsed_date = datetime.strptime(date_str, fmt).date()
+                    if "년" not in date_str:
+                        # 년도가 없는 경우 현재 년도 사용
+                        parsed_date = parsed_date.replace(year=datetime.now().year)
+                    return parsed_date
+                except ValueError:
+                    continue
+            
+            raise ValueError("지원하지 않는 날짜 형식입니다.")
+        except Exception as e:
+            raise ValueError(f"날짜 파싱 오류: {str(e)}")
+
+    def _parse_time(self, time_str: str) -> datetime.time:
+        """시간 문자열을 파싱하는 메서드"""
+        try:
+            # 24시간 형식으로 변환
+            if "오후" in time_str:
+                hour = int(time_str.replace("오후", "").replace("시", "").strip())
+                if hour != 12:
+                    hour += 12
+            elif "오전" in time_str:
+                hour = int(time_str.replace("오전", "").replace("시", "").strip())
+                if hour == 12:
+                    hour = 0
+            else:
+                hour = int(time_str.replace("시", "").strip())
+            
+            return datetime.strptime(f"{hour}:00", "%H:%M").time()
+        except Exception as e:
+            raise ValueError(f"시간 파싱 오류: {str(e)}")
+
+    def _manage_schedule(self, user_id: int, action: str, content: dict) -> Tuple[bool, str]:
+        """일정 관리 메서드"""
+        try:
+            if action == "add":
+                # 시간 정보 파싱
+                time_str = content.get("time", "12:00")
+                if isinstance(time_str, str):
+                    if ":" in time_str:
+                        parsed_time = datetime.strptime(time_str, "%H:%M").time()
+                    else:
+                        parsed_time = self._parse_time(time_str)
+                else:
+                    parsed_time = datetime.strptime("12:00", "%H:%M").time()
+
+                schedule = Schedule(
+                    user_id=user_id,
+                    title=content["title"],
+                    content=content.get("content", ""),
+                    select_date=self._parse_date(content["date"]),
+                    time=parsed_time
+                )
+                db.session.add(schedule)
+                message = "일정이 추가되었습니다."
+            
+            elif action == "update":
+                schedule = Schedule.query.filter_by(
+                    user_id=user_id,
+                    id=content["schedule_id"]
+                ).first()
+                if not schedule:
+                    return False, "해당 일정을 찾을 수 없습니다."
+                
+                if "title" in content:
+                    schedule.title = content["title"]
+                if "content" in content:
+                    schedule.content = content["content"]
+                if "date" in content:
+                    schedule.select_date = self._parse_date(content["date"])
+                if "time" in content:
+                    if isinstance(content["time"], str):
+                        if ":" in content["time"]:
+                            schedule.time = datetime.strptime(content["time"], "%H:%M").time()
+                        else:
+                            schedule.time = self._parse_time(content["time"])
+                message = "일정이 수정되었습니다."
+            
+            elif action == "delete":
+                schedule = Schedule.query.filter_by(
+                    user_id=user_id,
+                    id=content["schedule_id"]
+                ).first()
+                if not schedule:
+                    return False, "해당 일정을 찾을 수 없습니다."
+                
+                db.session.delete(schedule)
+                message = "일정이 삭제되었습니다."
+            
+            db.session.commit()
+            return True, message
+            
+        except Exception as e:
+            db.session.rollback()
+            return False, f"일정 관리 중 오류가 발생했습니다: {str(e)}"
+
+    def _manage_todo(self, user_id: int, action: str, content: dict) -> Tuple[bool, str]:
+        """할일 관리 메서드"""
+        try:
+            if action == "add":
+                todo = Todo(
+                    user_id=user_id,
+                    content=content["content"],
+                    select_date=self._parse_date(content["date"]),
+                    is_completed=content.get("is_completed", False)
+                )
+                db.session.add(todo)
+                message = "할일이 추가되었습니다."
+            
+            elif action == "update":
+                todo = Todo.query.filter_by(
+                    user_id=user_id,
+                    id=content["todo_id"]
+                ).first()
+                if not todo:
+                    return False, "해당 할일을 찾을 수 없습니다."
+                
+                if "content" in content:
+                    todo.content = content["content"]
+                if "date" in content:
+                    todo.select_date = self._parse_date(content["date"])
+                if "is_completed" in content:
+                    todo.is_completed = content["is_completed"]
+                message = "할일이 수정되었습니다."
+            
+            elif action == "delete":
+                todo = Todo.query.filter_by(
+                    user_id=user_id,
+                    id=content["todo_id"]
+                ).first()
+                if not todo:
+                    return False, "해당 할일을 찾을 수 없습니다."
+                
+                db.session.delete(todo)
+                message = "할일이 삭제되었습니다."
+            
+            db.session.commit()
+            return True, message
+            
+        except Exception as e:
+            db.session.rollback()
+            return False, f"할일 관리 중 오류가 발생했습니다: {str(e)}"
+
+    def _analyze_user_intent(self, question: str) -> Tuple[str, str, dict]:
+        """사용자 의도 분석"""
+        self._init_model()
+        
+        system_prompt = """
+        당신은 사용자의 의도를 분석하는 AI 비서입니다.
+        사용자의 메시지를 분석하여 다음 정보를 JSON 형식으로 반환해주세요:
+        1. type: "schedule" 또는 "todo" 또는 "chat"
+        2. action: "add", "update", "delete", 또는 "chat"
+        3. content: 관련 정보를 담은 딕셔너리
+
+        중요한 규칙:
+        - 시간이 언급된 경우(예: "2시", "오후 3시", "13시" 등) 반드시 type을 "schedule"로 설정하세요.
+        - schedule type인 경우 반드시 title과 time을 포함해야 합니다.
+        - todo type인 경우 시간 정보를 포함하지 않습니다.
+        
+        예시:
+        - "내일 2시에 미팅 일정 추가해줘" -> {"type": "schedule", "action": "add", "content": {"title": "미팅", "date": "내일", "time": "14:00"}}
+        - "오늘 오후 3시에 보고서 작성하기" -> {"type": "schedule", "action": "add", "content": {"title": "보고서 작성", "date": "오늘", "time": "15:00"}}
+        - "내일 2시에 할일로 보고서 작성 추가해줘" -> {"type": "schedule", "action": "add", "content": {"title": "보고서 작성", "date": "내일", "time": "14:00"}}
+        - "오늘 할일에 보고서 작성 추가해줘" -> {"type": "todo", "action": "add", "content": {"content": "보고서 작성", "date": "오늘"}}
+        """
+        
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=question)
+        ]
+        
+        response = self.chat_model.invoke(messages)
+        
+        try:
+            import json
+            result = json.loads(response.content)
+            
+            # 시간이 포함된 경우 schedule로 변환
+            if result["type"] == "todo" and ("time" in result["content"] or 
+                any(time_indicator in question for time_indicator in ["시에", "시까지", "시부터"])):
+                result["type"] = "schedule"
+                if "content" in result["content"]:
+                    result["content"]["title"] = result["content"].pop("content")
+                if "time" not in result["content"]:
+                    # 시간 정보 추출 (기본값 설정)
+                    result["content"]["time"] = "12:00"
+            
+            return result["type"], result["action"], result["content"]
+        except Exception as e:
+            current_app.logger.error(f"의도 분석 중 오류 발생: {str(e)}")
+            return "chat", "chat", {}
 
     def create_feedback(self, user_id: int, select_date: datetime.date) -> Tuple[bool, str]:
         """일일 피드백 생성"""
@@ -266,13 +508,12 @@ class LLMService:
         else:
             contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
 
-
         
         # 3. 모든 일일 데이터 가져오기
         all_data = CleanedData.query.filter_by(
             user_id=user_id
         ).order_by(CleanedData.select_date.desc()).all()
-        
+
         if all_data:
             contexts.append("\n과거 데이터:")
             for data in all_data:
