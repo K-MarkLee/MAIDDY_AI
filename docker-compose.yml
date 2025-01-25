@@ -24,8 +24,6 @@ services:
       - PYTHONPATH=/app
 
 
-
-
 networks:
   maiddy_shared_network: # 백엔드 네트워크 이름.
     external: true  # 이미 백엔드 Docker Compose에서 정의된 네트워크 사용

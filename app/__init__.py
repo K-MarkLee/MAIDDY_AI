@@ -27,7 +27,10 @@ def create_app(config_class=Config):
     
     # 스케줄러 초기화
     with app.app_context():
-        from app.scheduler import init_scheduler
+        from app.scheduler import init_scheduler, init_app
+        
+        # Flask 앱 인스턴스 설정
+        init_app(app)
         
         # 스케줄러 초기화
         success, message = init_scheduler()
