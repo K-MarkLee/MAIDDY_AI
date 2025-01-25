@@ -307,6 +307,52 @@ class LLMService:
         except Exception as e:
             raise ValueError(f"시간 파싱 오류: {str(e)}")
 
+    def _find_schedule(self, user_id: int, content: dict) -> Optional[Schedule]:
+        """일정을 찾는 메서드"""
+        try:
+            if "schedule_id" in content:
+                return Schedule.query.filter_by(user_id=user_id, id=content["schedule_id"]).first()
+            
+            # 날짜, 시간, 제목으로 찾기
+            query = Schedule.query.filter_by(user_id=user_id)
+            
+            if "date" in content:
+                query = query.filter_by(select_date=self._parse_date(content["date"]))
+            
+            if "time" in content:
+                if isinstance(content["time"], str):
+                    if ":" in content["time"]:
+                        time = datetime.strptime(content["time"], "%H:%M").time()
+                    else:
+                        time = self._parse_time(content["time"])
+                    query = query.filter_by(time=time)
+            
+            if "title" in content:
+                query = query.filter_by(title=content["title"])
+            
+            return query.first()
+        except Exception:
+            return None
+
+    def _find_todo(self, user_id: int, content: dict) -> Optional[Todo]:
+        """할일을 찾는 메서드"""
+        try:
+            if "todo_id" in content:
+                return Todo.query.filter_by(user_id=user_id, id=content["todo_id"]).first()
+            
+            # 날짜와 내용으로 찾기
+            query = Todo.query.filter_by(user_id=user_id)
+            
+            if "date" in content:
+                query = query.filter_by(select_date=self._parse_date(content["date"]))
+            
+            if "content" in content:
+                query = query.filter_by(content=content["content"])
+            
+            return query.first()
+        except Exception:
+            return None
+
     def _manage_schedule(self, user_id: int, action: str, content: dict) -> Tuple[bool, str]:
         """일정 관리 메서드"""
         try:
@@ -332,10 +378,7 @@ class LLMService:
                 message = "일정이 추가되었습니다."
             
             elif action == "update":
-                schedule = Schedule.query.filter_by(
-                    user_id=user_id,
-                    id=content["schedule_id"]
-                ).first()
+                schedule = self._find_schedule(user_id, content)
                 if not schedule:
                     return False, "해당 일정을 찾을 수 없습니다."
                 
@@ -354,10 +397,7 @@ class LLMService:
                 message = "일정이 수정되었습니다."
             
             elif action == "delete":
-                schedule = Schedule.query.filter_by(
-                    user_id=user_id,
-                    id=content["schedule_id"]
-                ).first()
+                schedule = self._find_schedule(user_id, content)
                 if not schedule:
                     return False, "해당 일정을 찾을 수 없습니다."
                 
@@ -385,10 +425,7 @@ class LLMService:
                 message = "할일이 추가되었습니다."
             
             elif action == "update":
-                todo = Todo.query.filter_by(
-                    user_id=user_id,
-                    id=content["todo_id"]
-                ).first()
+                todo = self._find_todo(user_id, content)
                 if not todo:
                     return False, "해당 할일을 찾을 수 없습니다."
                 
@@ -401,10 +438,7 @@ class LLMService:
                 message = "할일이 수정되었습니다."
             
             elif action == "delete":
-                todo = Todo.query.filter_by(
-                    user_id=user_id,
-                    id=content["todo_id"]
-                ).first()
+                todo = self._find_todo(user_id, content)
                 if not todo:
                     return False, "해당 할일을 찾을 수 없습니다."
                 
@@ -433,12 +467,14 @@ class LLMService:
         - 시간이 언급된 경우(예: "2시", "오후 3시", "13시" 등) 반드시 type을 "schedule"로 설정하세요.
         - schedule type인 경우 반드시 title과 time을 포함해야 합니다.
         - todo type인 경우 시간 정보를 포함하지 않습니다.
+        - 삭제나 수정 요청 시 일정/할일을 찾는데 필요한 모든 정보(날짜, 시간, 제목/내용)를 포함해야 합니다.
         
         예시:
         - "내일 2시에 미팅 일정 추가해줘" -> {"type": "schedule", "action": "add", "content": {"title": "미팅", "date": "내일", "time": "14:00"}}
         - "오늘 오후 3시에 보고서 작성하기" -> {"type": "schedule", "action": "add", "content": {"title": "보고서 작성", "date": "오늘", "time": "15:00"}}
-        - "내일 2시에 할일로 보고서 작성 추가해줘" -> {"type": "schedule", "action": "add", "content": {"title": "보고서 작성", "date": "내일", "time": "14:00"}}
+        - "오늘 17시 운동 일정 삭제해줘" -> {"type": "schedule", "action": "delete", "content": {"title": "운동", "date": "오늘", "time": "17:00"}}
         - "오늘 할일에 보고서 작성 추가해줘" -> {"type": "todo", "action": "add", "content": {"content": "보고서 작성", "date": "오늘"}}
+        - "오늘 할일 중에서 보고서 작성 삭제해줘" -> {"type": "todo", "action": "delete", "content": {"content": "보고서 작성", "date": "오늘"}}
         """
         
         messages = [
