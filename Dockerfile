@@ -4,11 +4,15 @@ FROM python:3.11-slim
 # 작업 디렉토리 설정
 WORKDIR /app
 
-# 시스템 패키지 설치
+# 시스템 패키지 설치 및 타임존 설정
 RUN apt-get update && apt-get install -y \
     libopenblas-dev \
     libomp-dev \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# 타임존 설정
+ENV TZ=Asia/Seoul
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
