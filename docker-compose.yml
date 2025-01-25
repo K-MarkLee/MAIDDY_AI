@@ -1,27 +1,29 @@
-version: '3.8'
+# version: '3.9'
 services:
-  app:
+
+  maiddy_ai:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: .  # Flask AI 프로젝트의 Dockerfile 위치
+    # command: gunicorn --workers 1 --bind 0.0.0.0:5000 app:app 
+    command : flask run --host=0.0.0.0 --port=5001
+    container_name: maiddy_ai
     ports:
-      - "5000:5000"
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
+      - "5001:5001"
+    networks:
+      - maiddy_shared_network  # Django 백엔드와 동일 네트워크 사용
+
+    environment: # .env 파일에 있는 환경변수를 사용.
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-    depends_on:
-      - db
+      - DATABASE_URL=${DATABASE_URL}
+      - FLASK_APP=wsgi:app
+      - PYTHONPATH=/app
 
-  db:
-    image: postgres:14
-    environment:
-      POSTGRES_USER: maiddy_admin
-      POSTGRES_PASSWORD: youngpotygotop123
-      POSTGRES_DB: maiddy_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
 
-volumes:
-  db_data:
+networks:
+  maiddy_shared_network: # 백엔드 네트워크 이름.
+    external: true  # 이미 백엔드 Docker Compose에서 정의된 네트워크 사용
