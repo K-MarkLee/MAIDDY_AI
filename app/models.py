@@ -73,14 +73,14 @@ class Feedback(db.Model):
     __tablename__ = "feedbacks"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id', ondelete='CASCADE'), nullable=False)
     feedback = db.Column(db.Text, nullable=False)
     select_date = db.Column(db.Date, nullable=False)
 
 class CleanedData(db.Model):
     __tablename__ = 'cleaned_data'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id', ondelete='CASCADE'), nullable=False)
     select_date = db.Column(db.Date, nullable=False)
     cleaned_text = db.Column(db.Text, nullable=False)
     
@@ -88,7 +88,7 @@ class CleanedData(db.Model):
 class Summary(db.Model):
     __tablename__ = 'summaries'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id', ondelete='CASCADE'), nullable=False)
     summary_text = db.Column(db.Text, nullable=False)
     type = db.Column(db.String(50), nullable=False)  # monthly, weekly
     start_date = db.Column(db.Date, nullable=False)  # 요약 시작일
@@ -104,7 +104,7 @@ class Embedding(db.Model):
     __tablename__ = 'embeddings'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id', ondelete='CASCADE'), nullable=False)
     summary_id = db.Column(db.Integer, db.ForeignKey('summaries.id'), nullable=False)
     type = db.Column(db.String(50), nullable=False)  # 'weekly' or 'monthly'
     embedding = db.Column(Vector(1536))
