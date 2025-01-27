@@ -40,7 +40,7 @@ def process_yesterday_data():
             llm_service = LLMService()
             
             # 모든 사용자의 데이터 처리
-            users = User.query.all()
+            users = User.query.with_entities(User.id, User.username).all()
             if not users:
                 flask_app.logger.warning("No users found in the system")
                 return
@@ -99,7 +99,7 @@ def process_weekly_data():
             embedding_service = EmbeddingService()
             
             # 모든 사용자의 주간 데이터 처리
-            users = User.query.all()
+            users = User.query.with_entities(User.id, User.username).all()
             if not users:
                 flask_app.logger.warning("No users found in the system")
                 return
