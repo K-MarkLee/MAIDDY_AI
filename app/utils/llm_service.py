@@ -168,17 +168,15 @@ class LLMService:
         if success:
             if daily_data.get('diary'):
                 diary_texts = [f"{diary['select_date']}: {diary['content']}" for diary in daily_data['diary']]
-                todaydata.append(f"\n오늘의 데이터:\n" + "\n".join(diary_texts))
-
+                todaydata.append(f"\n오늘의 일기:\n" + "\n".join(diary_texts))
+            
             if daily_data.get('todos'):
-                todo_texts = [f" {todo['select_date']} : {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
-                            for todo in daily_data['todos']]
-                todaydata.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
-
+                todo_texts = [f"- {todo['select_date']}: {todo['content']} (완료: {'예' if todo['is_completed'] else '아니오'})" for todo in daily_data['todos']]
+                todaydata.append(f"\n오늘의 할 일:\n" + "\n".join(todo_texts))
+            
             if daily_data.get('schedules'):
-                schedule_texts = [f"{schedule['select_date']} : {schedule['title']} {schedule['content']}" 
-                                for schedule in daily_data['schedules']]
-                todaydata.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
+                schedule_texts = [f"- {schedule['content']} ({schedule['select_date']})" for schedule in daily_data['schedules']]
+                todaydata.append(f"\n오늘의 일정:\n" + "\n".join(schedule_texts))
         else:
             contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
 
@@ -200,7 +198,15 @@ class LLMService:
             사용자의 일기, 할 일, 일정 데이터를 기반으로 자연스럽게 대화하며 도움을 제공해주세요.
             항상 친절하고 공감적인 태도를 유지하면서, 실질적인 도움이 되는 답변을 제공해주세요.
             
-            오늘의 데이터: {todaydata}
+            데이터 처리 규칙:
+            1. 아래 데이터는 오늘 생성된 모든 데이터입니다.
+            2. 각 데이터의 select_date 필드를 확인하여 구분하세요:
+               - select_date가 오늘({datetime.now().date()})인 데이터: 주요 정보로 다루고 상세히 언급
+               - select_date가 다른 날짜인 데이터: 부가 정보로 다루고 필요시에만 간단히 언급
+            3. 응답시 반드시 오늘 날짜의 데이터를 중심으로 답변하세요.
+            4. 날짜가 언급된 데이터의 경우 해당 날짜를 명시하여 응답하세요.
+
+            오늘 생성된 데이터: {todaydata}
             """
         else:
             system_prompt = f"""
@@ -209,8 +215,15 @@ class LLMService:
 
             유저 테스트를 위해서 데이터들을 자연스럽게 활용하고, 추가적으로 정보를 생각해 내어 대답해 주세요.
             항상 친절하고 공감적인 태도를 유지하면서, 실질적인 도움이 되는 답변을 제공해주세요.
-            
-            오늘의 데이터: {todaydata}
+            데이터 처리 규칙:
+            1. 아래 데이터는 오늘 생성된 모든 데이터입니다.
+            2. 각 데이터의 select_date 필드를 확인하여 구분하세요:
+               - select_date가 오늘({datetime.now().date()})인 데이터: 주요 정보로 다루고 상세히 언급
+               - select_date가 다른 날짜인 데이터: 부가 정보로 다루고 필요시에만 간단히 언급
+            3. 응답시 반드시 오늘 날짜의 데이터를 중심으로 답변하세요.
+            4. 날짜가 언급된 데이터의 경우 해당 날짜를 명시하여 응답하세요.
+
+            오늘 생성된 데이터: {todaydata}
             """
 
         # 메시지 구성
@@ -436,6 +449,7 @@ class LLMService:
         - todo type인 경우 시간 정보를 포함하지 않습니다.
         - 삭제나 수정 요청 시 일정/할일을 찾는데 필요한 모든 정보(날짜, 시간, 제목/내용)를 포함해야 합니다.
         
+        
         예시:
         - "내일 2시에 미팅 일정 추가해줘" -> {"type": "schedule", "action": "add", "content": {"title": "미팅", "date": "내일", "time": "14:00"}}
         - "오늘 오후 3시에 보고서 작성하기" -> {"type": "schedule", "action": "add", "content": {"title": "보고서 작성", "date": "오늘", "time": "15:00"}}
@@ -495,17 +509,15 @@ class LLMService:
             # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
                 diary_texts = [f"{diary['select_date']}: {diary['content']}" for diary in daily_data['diary']]
-                todaydata.append(f"\n오늘의 데이터:\n" + "\n".join(diary_texts))
-
+                todaydata.append(f"\n오늘의 일기:\n" + "\n".join(diary_texts))
+            
             if daily_data.get('todos'):
-                todo_texts = [f" {todo['select_date']} : {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
-                            for todo in daily_data['todos']]
-                todaydata.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
-
+                todo_texts = [f"- {todo['select_date']}: {todo['content']} (완료: {'예' if todo['is_completed'] else '아니오'})" for todo in daily_data['todos']]
+                todaydata.append(f"\n오늘의 할 일:\n" + "\n".join(todo_texts))
+            
             if daily_data.get('schedules'):
-                schedule_texts = [f"{schedule['select_date']} : {schedule['title']} {schedule['content']}" 
-                                for schedule in daily_data['schedules']]
-                todaydata.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
+                schedule_texts = [f"- {schedule['content']} ({schedule['select_date']})" for schedule in daily_data['schedules']]
+                todaydata.append(f"\n오늘의 일정:\n" + "\n".join(schedule_texts))
 
         else:
             contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
@@ -539,7 +551,15 @@ class LLMService:
             데이터를 반환하지말고, 오늘의 데이터에 대한 평가만을 적어줘.
             
 
-            오늘의 데이터야. {todaydata}
+            데이터 처리 규칙:
+            1. 아래 데이터는 오늘 생성된 모든 데이터입니다.
+            2. 각 데이터의 select_date 필드를 확인하여 구분하세요:
+               - select_date가 오늘({datetime.now().date()})인 데이터: 주요 정보로 다루고 상세히 언급
+               - select_date가 다른 날짜인 데이터: 부가 정보로 다루고 필요시에만 간단히 언급
+            3. 응답시 반드시 오늘 날짜의 데이터를 중심으로 답변하세요.
+            4. 날짜가 언급된 데이터의 경우 해당 날짜를 명시하여 응답하세요.
+
+            오늘 생성된 데이터: {todaydata}
             간단하게 1~2줄로 답변해주세요.
             """
         
@@ -593,17 +613,15 @@ class LLMService:
             # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
                 diary_texts = [f"{diary['select_date']}: {diary['content']}" for diary in daily_data['diary']]
-                todaydata.append(f"\n오늘의 데이터:\n" + "\n".join(diary_texts))
-
+                todaydata.append(f"\n오늘의 일기:\n" + "\n".join(diary_texts))
+            
             if daily_data.get('todos'):
-                todo_texts = [f" {todo['select_date']} : {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
-                            for todo in daily_data['todos']]
-                todaydata.append("오늘의 할 일 목록:\n" + "\n".join(todo_texts))
-
+                todo_texts = [f"- {todo['select_date']}: {todo['content']} (완료: {'예' if todo['is_completed'] else '아니오'})" for todo in daily_data['todos']]
+                todaydata.append(f"\n오늘의 할 일:\n" + "\n".join(todo_texts))
+            
             if daily_data.get('schedules'):
-                schedule_texts = [f"{schedule['select_date']} : {schedule['title']} {schedule['content']}" 
-                                for schedule in daily_data['schedules']]
-                todaydata.append("오늘의 일정 목록:\n" + "\n".join(schedule_texts))
+                schedule_texts = [f"- {schedule['content']} ({schedule['select_date']})" for schedule in daily_data['schedules']]
+                todaydata.append(f"\n오늘의 일정:\n" + "\n".join(schedule_texts))
 
         else:
             contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
@@ -634,7 +652,15 @@ class LLMService:
             깔끔하게 정리답변해줘야해.
             오늘 일정같은거 보여주지말고 딱 추천만.
             
-            오늘의 데이터야. {todaydata}
+            데이터 처리 규칙:
+            1. 아래 데이터는 오늘 생성된 모든 데이터입니다.
+            2. 각 데이터의 select_date 필드를 확인하여 구분하세요:
+               - select_date가 오늘({datetime.now().date()})인 데이터: 주요 정보로 다루고 상세히 언급
+               - select_date가 다른 날짜인 데이터: 부가 정보로 다루고 필요시에만 간단히 언급
+            3. 응답시 반드시 오늘 날짜의 데이터를 중심으로 답변하세요.
+            4. 날짜가 언급된 데이터의 경우 해당 날짜를 명시하여 응답하세요.
+
+            오늘 생성된 데이터: {todaydata}
             간단하게 1~2줄로 답변해줘.
 
         """
