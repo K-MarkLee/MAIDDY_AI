@@ -18,13 +18,13 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
     # 관계 설정
-    diaries = db.relationship('Diary', backref='user', lazy=True)
-    schedules = db.relationship('Schedule', backref='user', lazy=True)
-    todo = db.relationship('Todo', backref='user', lazy=True)
-    feedbacks = db.relationship('Feedback', backref='user', lazy=True)
-    summaries = db.relationship('Summary', backref='user', lazy=True)
-    embeddings = db.relationship('Embedding', backref='user', lazy=True)
-    cleaned_data = db.relationship('CleanedData', backref='user', lazy=True)
+    diaries = db.relationship('Diary', backref='user', lazy=True, cascade='all, delete-orphan')
+    schedules = db.relationship('Schedule', backref='user', lazy=True, cascade='all, delete-orphan')
+    todo = db.relationship('Todo', backref='user', lazy=True, cascade='all, delete-orphan')
+    feedbacks = db.relationship('Feedback', backref='user', lazy=True, cascade='all, delete-orphan')
+    summaries = db.relationship('Summary', backref='user', lazy=True, cascade='all, delete-orphan')
+    embeddings = db.relationship('Embedding', backref='user', lazy=True, cascade='all, delete-orphan')
+    cleaned_data = db.relationship('CleanedData', backref='user', lazy=True, cascade='all, delete-orphan')
 
 
 class Diary(db.Model):
@@ -73,14 +73,14 @@ class Feedback(db.Model):
     __tablename__ = "feedbacks"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id', ondelete='CASCADE'), nullable=False)
     feedback = db.Column(db.Text, nullable=False)
     select_date = db.Column(db.Date, nullable=False)
 
 class CleanedData(db.Model):
     __tablename__ = 'cleaned_data'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id', ondelete='CASCADE'), nullable=False)
     select_date = db.Column(db.Date, nullable=False)
     cleaned_text = db.Column(db.Text, nullable=False)
     
@@ -88,7 +88,7 @@ class CleanedData(db.Model):
 class Summary(db.Model):
     __tablename__ = 'summaries'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id', ondelete='CASCADE'), nullable=False)
     summary_text = db.Column(db.Text, nullable=False)
     type = db.Column(db.String(50), nullable=False)  # monthly, weekly
     start_date = db.Column(db.Date, nullable=False)  # 요약 시작일
@@ -104,8 +104,8 @@ class Embedding(db.Model):
     __tablename__ = 'embeddings'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id'), nullable=False)
-    summary_id = db.Column(db.Integer, db.ForeignKey('summaries.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users_user.id', ondelete='CASCADE'), nullable=False)
+    summary_id = db.Column(db.Integer, db.ForeignKey('summaries.id', ondelete='CASCADE'), nullable=False)
     type = db.Column(db.String(50), nullable=False)  # 'weekly' or 'monthly'
     embedding = db.Column(Vector(1536))
     start_date = db.Column(db.Date, nullable=False)  # 임베딩 시작일

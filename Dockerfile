@@ -1,14 +1,14 @@
-# 기본 이미지로 Python 3.11 slim 버전 사용
 FROM python:3.11-slim
 
-# 작업 디렉토리 설정
 WORKDIR /app
 
-# 시스템 패키지 설치
 RUN apt-get update && apt-get install -y \
     libopenblas-dev \
     libomp-dev \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+ENV TZ=Asia/Seoul
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -17,6 +17,4 @@ COPY . .
 
 EXPOSE 5001
 
-# gunicorn을 사용하여 Flask 앱 실행
-# CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:5000"]  # app.py의 app 객체를 gunicorn을 통해 실행
 CMD ["flask", "run", "--host=0.0.0.0", "--port=5001"]

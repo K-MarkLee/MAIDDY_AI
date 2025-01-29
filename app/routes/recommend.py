@@ -22,7 +22,7 @@ def create_recommendation():
     
     return jsonify({
         'success': True,
-        'message': '추천 생성 성공',
+        'message': '추천이 성공적으로 생성되었습니다',
         'data': {
             'recommendation': response
         }
