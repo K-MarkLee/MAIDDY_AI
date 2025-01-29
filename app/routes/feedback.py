@@ -6,7 +6,6 @@ feedback_bp = Blueprint('feedback', __name__)
 
 @feedback_bp.route("/", methods=["POST"])
 def create_feedback():
-    """일일 피드백 생성 API"""
     data = request.get_json()
     user_id = data.get('user_id')
     date_str = data.get('select_date')  # YYYY-MM-DD 형식

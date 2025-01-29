@@ -90,7 +90,6 @@ class Summary(db.Model):
 
 
 class Embedding(db.Model):
-    """텍스트 임베딩을 저장하는 모델"""
     __tablename__ = 'embeddings'
     
     id = db.Column(db.Integer, primary_key=True)

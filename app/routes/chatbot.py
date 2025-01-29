@@ -5,7 +5,6 @@ chatbot_bp = Blueprint('chatbot', __name__)
 
 @chatbot_bp.route("/", methods=["POST"])
 def chatbot():
-    """챗봇 응답 생성 API"""
     data = request.get_json()
     user_id = data.get('user_id')
     question = data.get('question')

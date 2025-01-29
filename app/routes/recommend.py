@@ -1,5 +1,3 @@
-# MAIDDY_AI/app/routes/recommend.py
-
 from flask import Blueprint, request, jsonify
 from app.utils.llm_service import LLMService
 
@@ -7,7 +5,6 @@ recommend_bp = Blueprint('recommend', __name__)
 
 @recommend_bp.route("/", methods=["POST"])
 def create_recommendation():
-    """일정 추천 생성 API"""
     data = request.get_json()
     user_id = data.get('user_id')
     
