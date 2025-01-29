@@ -26,7 +26,7 @@ def chatbot():
         
     return jsonify({
         'success': True,
-        'message': '응답 생성 성공',
+        'message': '응답이 성공적으로 생성되었습니다',
         'data': {
             'response': response
         }

@@ -7,13 +7,21 @@ from app.extensions import db
 from flask import current_app
 from app.utils.embedding import EmbeddingService
 
+from datetime import datetime, timedelta
+from typing import Dict, Tuple, List, Optional
+from langchain_community.chat_models import ChatOpenAI
+from langchain.schema import SystemMessage, HumanMessage
+from app.models import Todo, Diary, Schedule, CleanedData, Feedback, Summary, Embedding
+from app.extensions import db
+from flask import current_app
+from app.utils.embedding import EmbeddingService
+
 class LLMService:
     def __init__(self):
         self.chat_model = None
         self.embedding_service = None
         
     def _init_model(self):
-        """모델 초기화"""
         if not self.chat_model:
             self.chat_model = ChatOpenAI(
                 model=current_app.config['OPENAI_MODEL'],
@@ -22,20 +30,16 @@ class LLMService:
             )
            
     def _init_embedding_service(self):
-        """임베딩 서비스 초기화"""
         if not self.embedding_service:
             self.embedding_service = EmbeddingService()
 
     def _get_similar_summaries(self, user_id: int, query: str, limit: int = 3) -> List[str]:
-        """유사한 주간 요약 검색"""
         self._init_embedding_service()
-        self.embedding_service._init_model()  # 임베딩 모델 초기화 추가
+        self.embedding_service._init_model()
         
         try:
-            # 쿼리 임베딩 생성
             query_embedding = self.embedding_service._create_embedding(query)
             
-            # Vector 검색
             similar_summaries = Embedding.query.filter_by(
                 user_id=user_id,
                 type='weekly'
@@ -43,7 +47,6 @@ class LLMService:
                 Embedding.embedding.cosine_distance(query_embedding)
             ).limit(limit).all()
             
-            # 관련 Summary 텍스트 가져오기
             summary_texts = []
             for emb in similar_summaries:
                 summary = Summary.query.get(emb.summary_id)
@@ -52,35 +55,26 @@ class LLMService:
             
             return summary_texts
         except Exception as e:
-            current_app.logger.error(f"Error in _get_similar_summaries: {str(e)}")
+            current_app.logger.error(f"유사한 주간 요약 검색 중 오류가 발생했습니다: {str(e)}")
             return []
 
     def get_daily_data(self, user_id: int, select_date: datetime.date) -> Tuple[bool, Optional[Dict], str]:
-        """사용자의 일일 데이터 조회
-        
-        Returns:
-            Tuple[bool, Optional[Dict], str]: (성공 여부, 데이터 딕셔너리, 메시지)
-        """
         try:
-            # Todo 데이터 조회
             todos = Todo.query.filter_by(
                 user_id=user_id,
                 created_at=select_date
             ).all()
             
-            # Diary 데이터 조회
             diary = Diary.query.filter_by(
                 user_id=user_id,
                 select_date=select_date
             ).first()
             
-            # Schedule 데이터 조회
             schedules = Schedule.query.filter_by(
                 user_id=user_id,
                 created_at=select_date
             ).all()
             
-            # 필수 데이터 체크
             if not todos and not diary and not schedules:
                 return False, {}, "데이터가 없습니다."
             
@@ -92,32 +86,26 @@ class LLMService:
                 
             return True, data, "데이터 조회 성공"
         except Exception as e:
-            current_app.logger.error(f"Error in get_daily_data: {str(e)}")
+            current_app.logger.error(f"일일 데이터 조회 중 오류가 발생했습니다: {str(e)}")
             return False, None, "데이터 조회 중 오류가 발생했습니다."
 
     def clean_daily_data(self, user_id: int, select_date: datetime.date) -> Tuple[bool, str]:
-        """일일 데이터 전처리 및 저장"""
         self._init_model()
         self._init_embedding_service()
         
         try:
-            # 데이터 조회
             success, daily_data, message = self.get_daily_data(user_id, select_date)
             if not success:
                 return False, message
             
-            # 데이터 텍스트 형식으로 변환
             text_content = []
 
-            # 일기 데이터 추가 (select_date 포함)
             text_content.append(f"일기 ({daily_data['diary'][0]['select_date']}): {daily_data['diary'][0]['diary']}" if daily_data['diary'] else "")
 
-            # 할 일 목록 추가
             todo_texts = [f"- {todo['content']} ({'완료' if todo['is_completed'] else '미완료'})" 
                         for todo in daily_data['todos']]
             text_content.append("할 일 목록:\n" + "\n".join(todo_texts))
 
-            # 일정 목록 추가 (select_date 포함)
             schedule_texts = [f"- {schedule['title']} ({schedule['select_date']}): {schedule['content']}" 
                             for schedule in daily_data['schedules']]
             text_content.append("일정 목록:\n" + "\n".join(schedule_texts))
@@ -125,14 +113,12 @@ class LLMService:
             combined_text = "\n\n".join(text_content)       
             
             try:
-                # LLM을 통한 텍스트 전처리
                 cleaned_text = self._preprocess_text(combined_text)
             except Exception as e:
-                current_app.logger.error(f"OpenAI API error: {str(e)}")
+                current_app.logger.error(f"OpenAI API 호출 중 오류가 발생했습니다: {str(e)}")
                 return False, "텍스트 전처리 중 오류가 발생했습니다."
             
             try:
-                # CleanedData에 저장
                 cleaned_data = CleanedData(
                     user_id=user_id,
                     select_date=select_date,
@@ -142,53 +128,44 @@ class LLMService:
                 db.session.commit()
             except Exception as e:
                 db.session.rollback()
-                current_app.logger.error(f"Database error: {str(e)}")
+                current_app.logger.error(f"데이터베이스 저장 중 오류가 발생했습니다: {str(e)}")
                 return False, "데이터 저장 중 오류가 발생했습니다."
             
             return True, cleaned_text
             
         except Exception as e:
-            current_app.logger.error(f"Unexpected error in clean_daily_data: {str(e)}")
-            return False, "데이터 처리 중 오류가 발생했습니다."
+            current_app.logger.error(f"일일 데이터 전처리 중 오류가 발생했습니다: {str(e)}")
+            return False, "데이터 전처리 중 오류가 발생했습니다."
 
     def get_chat_response(self, user_id: int, question: str) -> Tuple[bool, str]:
-        """챗봇 응답 생성"""
         self._init_model()  
 
-        # 사용자 의도 분석
         intent_type, action, content = self._analyze_user_intent(question)
         
-        # 원래 의도 저장
         original_type = "todo" if "시에" in question and "할일" in question else None
         
-        # 일정이나 할일 관리 요청인 경우
         if intent_type in ["schedule", "todo"] and action in ["add", "update", "delete"]:
             if intent_type == "schedule":
                 success, message = self._manage_schedule(user_id, action, content)
-                # 원래 할일로 요청했지만 시간이 있어서 일정으로 변환된 경우
                 if original_type == "todo":
                     message = f"시간이 포함되어 있어서 할일이 아닌 일정으로 추가했습니다. {message}"
-            else:  # todo
+            else: 
                 success, message = self._manage_todo(user_id, action, content)
                 
             if not success:
                 return False, message
 
-        # 기존의 LLM 응답 생성 로직
         contexts = []
         todaydata = []
 
-        # 1. Vector 검색으로 유사한 주간 요약 찾기
         similar_summaries = self._get_similar_summaries(user_id, question)
         if similar_summaries:
             contexts.append("관련된 과거 주간 요약:")
             contexts.extend(similar_summaries)
 
-        # 2. 일일 데이터 조회
         today = datetime.now().date()
         success, daily_data, message = self.get_daily_data(user_id, today)
         if success:
-            # 일일 데이터를 컨텍스트에 추가
             if daily_data.get('diary'):
                 diary_texts = [f"{diary['select_date']}: {diary['content']}" for diary in daily_data['diary']]
                 todaydata.append(f"\n오늘의 데이터:\n" + "\n".join(diary_texts))
@@ -205,7 +182,6 @@ class LLMService:
         else:
             contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
 
-        # 3. 모든 일일 데이터 가져오기
         all_data = CleanedData.query.filter_by(
             user_id=user_id
         ).order_by(CleanedData.select_date.desc()).all()
@@ -216,7 +192,6 @@ class LLMService:
                 if data.select_date != today:  # 오늘 데이터는임시 제외
                     contexts.append(data.cleaned_text)
 
-        # 일정이나 할일이 변경된 경우 응답 메시지 수정
         if intent_type in ["schedule", "todo"] and action in ["add", "update", "delete"]:
             system_prompt = f"""
             당신은 사용자의 일상을 관리해주는 AI 비서입니다.
@@ -249,13 +224,11 @@ class LLMService:
             response = self.chat_model.invoke(messages)
             return True, response.content
         except Exception as e:
-            current_app.logger.error(f"chat_model.invoke 중 오류 발생: {str(e)}")
+            current_app.logger.error(f"챗봇 응답 생성 중 오류가 발생했습니다: {str(e)}")
             return False, "챗봇 응답 생성 중 오류가 발생했습니다."
 
     def _parse_date(self, date_str: str) -> datetime.date:
-        """날짜 문자열을 파싱하는 메서드"""
         try:
-            # 다양한 날짜 형식 처리
             formats = [
                 "%Y-%m-%d",
                 "%Y년 %m월 %d일",
@@ -289,7 +262,6 @@ class LLMService:
             raise ValueError(f"날짜 파싱 오류: {str(e)}")
 
     def _parse_time(self, time_str: str) -> datetime.time:
-        """시간 문자열을 파싱하는 메서드"""
         try:
             # 24시간 형식으로 변환
             if "오후" in time_str:
@@ -308,7 +280,6 @@ class LLMService:
             raise ValueError(f"시간 파싱 오류: {str(e)}")
 
     def _find_schedule(self, user_id: int, content: dict) -> Optional[Schedule]:
-        """일정을 찾는 메서드"""
         try:
             if "schedule_id" in content:
                 return Schedule.query.filter_by(user_id=user_id, id=content["schedule_id"]).first()
@@ -335,7 +306,6 @@ class LLMService:
             return None
 
     def _find_todo(self, user_id: int, content: dict) -> Optional[Todo]:
-        """할일을 찾는 메서드"""
         try:
             if "todo_id" in content:
                 return Todo.query.filter_by(user_id=user_id, id=content["todo_id"]).first()
@@ -354,7 +324,6 @@ class LLMService:
             return None
 
     def _manage_schedule(self, user_id: int, action: str, content: dict) -> Tuple[bool, str]:
-        """일정 관리 메서드"""
         try:
             if action == "add":
                 # 시간 정보 파싱
@@ -412,7 +381,6 @@ class LLMService:
             return False, f"일정 관리 중 오류가 발생했습니다: {str(e)}"
 
     def _manage_todo(self, user_id: int, action: str, content: dict) -> Tuple[bool, str]:
-        """할일 관리 메서드"""
         try:
             if action == "add":
                 todo = Todo(
@@ -453,7 +421,6 @@ class LLMService:
             return False, f"할일 관리 중 오류가 발생했습니다: {str(e)}"
 
     def _analyze_user_intent(self, question: str) -> Tuple[str, str, dict]:
-        """사용자 의도 분석"""
         self._init_model()
         
         system_prompt = """
@@ -504,7 +471,6 @@ class LLMService:
             return "chat", "chat", {}
 
     def create_feedback(self, user_id: int, select_date: datetime.date) -> Tuple[bool, str]:
-        """일일 피드백 생성"""
         self._init_model()
         
         # 컨텍스트 수집
@@ -598,11 +564,10 @@ class LLMService:
 
             return True, feedback_text
         except Exception as e:
-            current_app.logger.error(f"Error in create_feedback: {str(e)}")
+            current_app.logger.error(f"피드백 생성 중 오류가 발생했습니다: {str(e)}")
             return False, "피드백 생성 중 오류가 발생했습니다."
 
     def create_recommendation(self, user_id: int) -> Tuple[bool, str]:
-        """일정 추천 생성"""
         self._init_model()
         
         # 컨텍스트 수집
@@ -684,7 +649,6 @@ class LLMService:
         return True, response.content
 
     def _preprocess_text(self, text: str) -> str:
-        """LLM을 사용한 텍스트 전처리"""
         system_prompt = """
         입력된 텍스트를 자연스럽게 정리해주세요. 
         중요한 내용은 유지하면서, 불필요한 부분은 제거하고 문장을 매끄럽게 다듬어주세요.
