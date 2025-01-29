@@ -34,8 +34,6 @@ def create_app(config_class=Config):
 
 
 def register_blueprints(app):
-
-    
     app.register_blueprint(feedback_bp, url_prefix='/feedback')
     app.register_blueprint(recommend_bp, url_prefix='/recommend')
     app.register_blueprint(chatbot_bp, url_prefix='/chatbot')

@@ -1,7 +1,5 @@
 from flask import Blueprint, request, jsonify
 from app.utils.llm_service import LLMService
-from datetime import datetime
-from app.models import Schedule, Todo, Diary
 
 chatbot_bp = Blueprint('chatbot', __name__)
 

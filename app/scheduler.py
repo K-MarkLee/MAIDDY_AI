@@ -10,7 +10,6 @@ import atexit
 flask_app = None
 
 def init_app(app):
-    """Flask 앱 초기화"""
     global flask_app
     flask_app = app
 

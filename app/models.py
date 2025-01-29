@@ -1,5 +1,3 @@
-# app/models.py
-
 from app.extensions import db
 from datetime import datetime, date
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -7,9 +5,7 @@ from pgvector.sqlalchemy import Vector
 import sqlalchemy as sa
 
 
-# 사용자 데이터 모델 (기존 테이블 확장)
 class User(db.Model):
-    """사용자 정보를 저장하는 테이블"""
     __tablename__ = "users_user"
     __table_args__ = {'extend_existing': True}  # 기존 테이블 확장
 
@@ -17,18 +13,16 @@ class User(db.Model):
     username = db.Column(db.String(255), nullable=False, unique=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
-    # 관계 설정
-    diaries = db.relationship('Diary', backref='user', lazy=True, cascade='all, delete-orphan')
-    schedules = db.relationship('Schedule', backref='user', lazy=True, cascade='all, delete-orphan')
-    todo = db.relationship('Todo', backref='user', lazy=True, cascade='all, delete-orphan')
-    feedbacks = db.relationship('Feedback', backref='user', lazy=True, cascade='all, delete-orphan')
-    summaries = db.relationship('Summary', backref='user', lazy=True, cascade='all, delete-orphan')
-    embeddings = db.relationship('Embedding', backref='user', lazy=True, cascade='all, delete-orphan')
-    cleaned_data = db.relationship('CleanedData', backref='user', lazy=True, cascade='all, delete-orphan')
+    diaries = db.relationship('Diary', backref='user', lazy=True)
+    schedules = db.relationship('Schedule', backref='user', lazy=True)
+    todo = db.relationship('Todo', backref='user', lazy=True)
+    feedbacks = db.relationship('Feedback', backref='user', lazy=True)
+    summaries = db.relationship('Summary', backref='user', lazy=True)
+    embeddings = db.relationship('Embedding', backref='user', lazy=True)
+    cleaned_data = db.relationship('CleanedData', backref='user', lazy=True)
 
 
 class Diary(db.Model):
-    """일기 정보를 저장하는 테이블"""
     __tablename__ = "diaries_diary"
     __table_args__ = {'extend_existing': True}  # 기존 테이블 확장
 
@@ -40,7 +34,6 @@ class Diary(db.Model):
 
 
 class Schedule(db.Model):
-    """일정 정보를 저장하는 테이블"""
     __tablename__ = "schedules_schedule"
     __table_args__ = {'extend_existing': True}  # 기존 테이블 확장
 
@@ -50,12 +43,11 @@ class Schedule(db.Model):
     content = db.Column(db.Text, nullable=True)
     select_date = db.Column(db.Date, nullable=False)
     time = db.Column(db.Time, nullable=False)  # HH:MM:SS 형식으로 저장
-    pinned = db.Column(db.Boolean, nullable=False, default=False)  # 고정된 일정 여부
+    pinned = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class Todo(db.Model):
-    """할일 정보를 저장하는 테이블"""
     __tablename__ = "todo_todo"
     __table_args__ = {'extend_existing': True}  # 기존 테이블 확장
 
@@ -67,9 +59,7 @@ class Todo(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
-# LLM 서비스 모델
 class Feedback(db.Model):
-    """일일 피드백을 저장하는 테이블"""
     __tablename__ = "feedbacks"
 
     id = db.Column(db.Integer, primary_key=True)

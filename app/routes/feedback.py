@@ -1,5 +1,3 @@
-# MAIDDY_AI/app/routes/feedback.py
-
 from flask import Blueprint, request, jsonify
 from app.utils.llm_service import LLMService
 from datetime import datetime
@@ -21,7 +19,6 @@ def create_feedback():
     except ValueError:
         return jsonify({'success': False, 'message': '올바른 날짜 형식이 아닙니다. (YYYY-MM-DD)'}), 400
 
-    
     llm_service = LLMService()
     success, response = llm_service.create_feedback(user_id, select_date)
     
