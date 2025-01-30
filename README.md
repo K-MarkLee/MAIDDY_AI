@@ -1,3 +1,111 @@
+# AI BUILD
+
+1. Clone the project repository:
+    ```
+    https://github.com/K-MarkLee/MAIDDY_AI/
+    ```
+
+2. Navigate to the projec directory:
+    ```
+    cd MAIDDY_AI
+    ```
+    
+3. **Create `.env` file:**
+    Create a file named `.env` in the project root directory and add the following content:
+    ```
+    OPENAI_API_KEY, DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DATABASE_URL, SQLALCHEMY_TRACK_MODIFICATIONS, TIMEZONE
+    ```
+
+4. **Run the docker:**
+    ```
+    docker-compose up --build
+    ```
+
+
+5. Apply database migration
+    ```
+    docker-compose exec maiddy_ai flask db init
+    docker exec -it maiddy_ai bash
+    ```
+    need to go inside docker file
+    ```
+    docker exec -it maiddy_ai bash
+    ```
+    need to add EXCLUDED_TABLES_AND_INDEXCES
+    ```
+    cd migrations
+    apt-get update
+    apt-get install vim
+    vi env.py
+    ```
+
+   env.py
+    ```
+        EXCLUDED_TABLES_AND_INDEXES = [
+            'users_user',
+            'todo_todo',
+            'schedules_schedule',
+            'diaries_diary',
+            'django_session',
+            'token_blacklist_outstandingtoken',
+            'token_blacklist_blacklistedtoken',
+            'users_user_groups',
+            'django_content_type',
+            'auth_group_permissions',
+            'django_migrations',
+            'auth_group',
+            'django_admin_log',
+            'users_user_user_permissions',
+            'auth_permission',
+            # 필요한 경우 여기에 추가
+        ]
+        if type_ == "table" and name in EXCLUDED_TABLES_AND_INDEXES:
+            return False  # 해당 테이블은 제외
+        elif type_ == "index" and name in EXCLUDED_TABLES_AND_INDEXES:
+            return False  # 해당 인덱스는 제외
+        return True
+
+    ...
+    with connectable.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=get_metadata(),
+            include_object=include_object,
+            **conf_args
+        )
+    
+    ```
+    run migration
+    ```
+    exit
+    docker-compose exec maiddy_ai flask db stamp head
+    docker-compose exec maiddy_ai flask db migrate
+    ```
+    edit file
+    ```
+    docker exec -it maiddy_ai bash
+    cd migrations/versions
+    vi {migration file}
+    ```
+    version.py
+    need to add import and change embedding line
+    ```
+    from pgvector.sqlalchemy import Vector
+
+    ...
+    # replace embedding line into
+    sa.Column('embedding', Vector(1536), nullable=True),
+    
+    ```
+    finish migration
+    ```
+    exit
+    docker-compose exec maiddy_ai flask db upgrade
+    ```
+
+---
+
+
 <div align=center><h1>📚 STACKS</h1></div>
 
 <div align=center> 
