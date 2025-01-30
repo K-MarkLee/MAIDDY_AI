@@ -60,19 +60,23 @@ class LLMService:
 
     def get_daily_data(self, user_id: int, select_date: datetime.date) -> Tuple[bool, Optional[Dict], str]:
         try:
-            todos = Todo.query.filter_by(
-                user_id=user_id,
-                created_at=select_date
+            # 해당 날짜의 시작과 끝 datetime 구하기
+            start_datetime = datetime.combine(select_date, datetime.min.time())
+            end_datetime = datetime.combine(select_date, datetime.max.time())
+            
+            todos = Todo.query.filter(
+                Todo.user_id == user_id,
+                Todo.created_at.between(start_datetime, end_datetime)
             ).all()
             
-            diary = Diary.query.filter_by(
-                user_id=user_id,
-                select_date=select_date
+            diary = Diary.query.filter(
+                Diary.user_id == user_id,
+                Diary.created_at.between(start_datetime, end_datetime)
             ).first()
             
-            schedules = Schedule.query.filter_by(
-                user_id=user_id,
-                created_at=select_date
+            schedules = Schedule.query.filter(
+                Schedule.user_id == user_id,
+                Schedule.created_at.between(start_datetime, end_datetime)
             ).all()
             
             if not todos and not diary and not schedules:
@@ -166,6 +170,8 @@ class LLMService:
         today = datetime.now().date()
         success, daily_data, message = self.get_daily_data(user_id, today)
         if success:
+            current_app.logger.info(f"Retrieved daily data: {daily_data}")  # 데이터 로깅 추가
+            
             if daily_data.get('diary'):
                 diary_texts = [f"{diary['select_date']}: {diary['content']}" for diary in daily_data['diary']]
                 todaydata.append(f"\n오늘의 일기:\n" + "\n".join(diary_texts))
@@ -173,10 +179,14 @@ class LLMService:
             if daily_data.get('todos'):
                 todo_texts = [f"- {todo['select_date']}: {todo['content']} (완료: {'예' if todo['is_completed'] else '아니오'})" for todo in daily_data['todos']]
                 todaydata.append(f"\n오늘의 할 일:\n" + "\n".join(todo_texts))
+                current_app.logger.info(f"Added todos to context: {todo_texts}")  # todo 로깅 추가
             
             if daily_data.get('schedules'):
                 schedule_texts = [f"- {schedule['content']} ({schedule['select_date']})" for schedule in daily_data['schedules']]
                 todaydata.append(f"\n오늘의 일정:\n" + "\n".join(schedule_texts))
+                current_app.logger.info(f"Added schedules to context: {schedule_texts}")  # schedule 로깅 추가
+            
+            current_app.logger.info(f"Final todaydata: {todaydata}")  # 최종 데이터 로깅 추가
         else:
             contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
 
@@ -232,6 +242,15 @@ class LLMService:
             SystemMessage(content="\n".join(contexts)),
             HumanMessage(content=question)
         ]
+
+        if todaydata:
+            contexts.extend(todaydata)
+            current_app.logger.info(f"Final contexts after adding todaydata: {contexts}")  # contexts 로깅 추가
+        else:
+            contexts.append(f"일일 데이터가 없습니다. 최소 하루의 데이터를 추가하여야 결과를 얻을 수 있습니다.")
+
+        if not contexts:
+            contexts = ["데이터가 없습니다."]
 
         try:
             response = self.chat_model.invoke(messages)
@@ -615,11 +634,11 @@ class LLMService:
                 diary_texts = [f"{diary['select_date']}: {diary['content']}" for diary in daily_data['diary']]
                 todaydata.append(f"\n오늘의 일기:\n" + "\n".join(diary_texts))
             
-            if daily_data.get('todos'):
+            if daily_data.get('todos'):  # 'todo'가 아닌 'todos'
                 todo_texts = [f"- {todo['select_date']}: {todo['content']} (완료: {'예' if todo['is_completed'] else '아니오'})" for todo in daily_data['todos']]
                 todaydata.append(f"\n오늘의 할 일:\n" + "\n".join(todo_texts))
             
-            if daily_data.get('schedules'):
+            if daily_data.get('schedules'):  # 'schedule'이 아닌 'schedules'
                 schedule_texts = [f"- {schedule['content']} ({schedule['select_date']})" for schedule in daily_data['schedules']]
                 todaydata.append(f"\n오늘의 일정:\n" + "\n".join(schedule_texts))
 

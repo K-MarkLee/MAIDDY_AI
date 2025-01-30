@@ -14,7 +14,10 @@ def create_feedback():
         return jsonify({'success': False, 'message': '사용자 ID가 필요합니다.'}), 400
     
     try:
-        select_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        if date_str is None:
+            select_date = datetime.now().date()
+        else:
+            select_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
         return jsonify({'success': False, 'message': '올바른 날짜 형식이 아닙니다. (YYYY-MM-DD)'}), 400
 
