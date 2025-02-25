@@ -1,6 +1,6 @@
 # AI BUILD
 
-1. Clone the project repository:
+1. Clone the project repository:  
     ```
     https://github.com/K-MarkLee/MAIDDY_AI/
     ```
